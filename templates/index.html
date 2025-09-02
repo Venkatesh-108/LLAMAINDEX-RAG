@@ -359,6 +359,7 @@
     <script>
         // Global variables
         let currentChatId = null;
+        let isNewChat = true; // Start in a new chat state
         let socket = null;
         let documents = [];
         let chats = [];
@@ -370,12 +371,6 @@
                 initializeApp();
                 setupEventListeners();
                 loadInitialData();
-                loadChatHistoryFromStorage();
-                
-                // Set initial state
-                if (chats.length === 0) {
-                    startNewChat();
-                }
             } catch (error) {
                 console.error('Error initializing application:', error);
                 // Show error message to user
@@ -467,14 +462,14 @@
             fetch('/api/chats')
                 .then(response => response.json())
                 .then(data => {
-                    chats = data;
+                    chats = data || [];
                     renderChats();
                 })
                 .catch(error => {
                     console.error('Error loading chats:', error);
-                    // Use sample data as fallback
                     chats = [];
                     renderChats();
+                    setNewChatState(); // Fallback to new chat state
                 });
         }
         
@@ -560,7 +555,7 @@
         
         function createChatElement(chat) {
             const div = document.createElement('div');
-            div.className = `chat-item bg-indigo-800/30 rounded-lg p-2 cursor-pointer ${currentChatId === chat.id ? 'active' : ''}`;
+            div.className = `chat-item bg-indigo-800/30 rounded-lg p-2 cursor-pointer group ${currentChatId === chat.id ? 'active' : ''}`;
             div.innerHTML = `
                 <div class="flex items-center space-x-2">
                     <i class="fas fa-comment text-indigo-300 text-sm"></i>
@@ -568,62 +563,36 @@
                         <p class="text-white font-medium truncate text-xs">${chat.title}</p>
                         <p class="text-indigo-200 text-xs">${chat.document} • ${chat.last_message}</p>
                     </div>
-                    <button class="text-indigo-300 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity" onclick="deleteChat('${chat.id}', event)">
+                    <button class="text-indigo-300 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity" onclick="deleteChatWrapper('${chat.id}', event)">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
             `;
             
-            div.addEventListener('click', () => selectChat(chat));
-            div.classList.add('group');
+            div.addEventListener('click', () => selectChat(chat.id));
             return div;
         }
         
         function startNewChat() {
-            currentChatId = `chat_${Date.now()}`;
-            const chatTitle = `New Chat ${new Date().toLocaleTimeString()}`;
-            
-            // Add to chats list
-            const newChat = {
-                id: currentChatId,
-                title: chatTitle,
-                document: 'General',
-                last_message: 'Just now',
-                message_count: 0
-            };
-            
-            chats.unshift(newChat);
-            chatHistory[currentChatId] = [];
-            
-            // Update UI
-            renderChats();
-            clearChatMessages();
-            addWelcomeMessage();
-            updateCurrentChatTitle(chatTitle);
-            
-            // Save to storage
-            saveChatHistoryToStorage();
+            setNewChatState();
         }
         
-        function selectChat(chat) {
-            currentChatId = chat.id;
+        function selectChat(chatId) {
+            if (currentChatId === chatId) return;
             
-            // Update active state
-            document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
-            // Find the clicked chat item and make it active
-            const chatElements = document.querySelectorAll('.chat-item');
-            chatElements.forEach(item => {
-                if (item.querySelector('p').textContent === chat.title) {
-                    item.classList.add('active');
-                }
-            });
+            currentChatId = chatId;
+            isNewChat = false;
             
-            // Load chat history
-            loadChatHistory(chat.id);
+            const chat = chats.find(c => c.id === chatId);
             updateCurrentChatTitle(chat.title);
             
-            // Update chat metadata
-            updateChatLastMessage(chat.id, 'Just now');
+            renderChats(); // Re-render to update active state
+            
+            if (chatHistory[chatId]) {
+                renderChatMessages(chatId);
+            } else {
+                loadChatHistory(chatId);
+            }
         }
         
         function selectDocument(doc) {
@@ -648,9 +617,6 @@
             addDocumentContextMessage(doc);
             updateCurrentChatTitle(chatTitle);
             renderChats();
-            
-            // Save to storage
-            saveChatHistoryToStorage();
         }
         
         function updateCurrentChatTitle(title) {
@@ -659,37 +625,58 @@
         }
         
         function loadChatHistory(chatId) {
-            // Load from local storage first
-            if (chatHistory[chatId] && chatHistory[chatId].length > 0) {
-                clearChatMessages();
-                chatHistory[chatId].forEach(message => {
-                    addMessageToChat(message);
-                });
-                return;
-            }
-            
-            // Fallback to API
             fetch(`/api/chat/${chatId}`)
                 .then(response => response.json())
-                .then(data => {
-                    clearChatMessages();
-                    chatHistory[chatId] = data;
-                    data.forEach(message => {
-                        addMessageToChat(message);
-                    });
-                    saveChatHistoryToStorage();
+                .then(history => {
+                    chatHistory[chatId] = history;
+                    renderChatMessages(chatId);
                 })
-                .catch(error => {
-                    console.error('Error loading chat history:', error);
-                    // Show welcome message if no history
-                    clearChatMessages();
-                    addWelcomeMessage();
-                });
+                .catch(error => console.error('Error loading chat history:', error));
+        }
+
+        function setNewChatState() {
+            currentChatId = null;
+            isNewChat = true;
+            document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+            updateCurrentChatTitle("New Chat");
+            renderWelcomeMessage();
+        }
+
+        function renderWelcomeMessage() {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = `
+                <div class="message-bubble">
+                    <div class="flex items-start space-x-3">
+                        <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-brain text-white text-xs"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <span class="font-semibold text-gray-800 text-sm">Welcome to SRM AI Doc Assist!</span>
+                            </div>
+                            <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                                <p class="text-gray-700 text-sm mb-3">
+                                    I'm here to help you with your documents. Ask me anything, or start by uploading a new document.
+                                </p>
+                                <p class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                    To start, just type your question below or select a document.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
         
-        function clearChatMessages() {
+        function renderChatMessages(chatId) {
             const container = document.getElementById('chatMessages');
             container.innerHTML = '';
+            const history = chatHistory[chatId] || [];
+            if (history.length === 0) {
+                addWelcomeMessage(); // Show welcome message for empty new chats
+            } else {
+                history.forEach(message => addMessageToChat(message));
+            }
         }
         
         function addWelcomeMessage() {
@@ -704,11 +691,10 @@
                     <div class="flex-1">
                         <div class="flex items-center space-x-2 mb-1">
                             <span class="font-semibold text-gray-800 text-sm">AI Document Assistant</span>
-                            <span class="text-xs text-gray-500">Ready to help</span>
                         </div>
                         <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
                             <p class="text-gray-700 text-sm mb-3">
-                                Hello! I'm your AI document assistant. I can help you analyze, understand, and extract insights from your uploaded documents. What would you like to know?
+                                I'm ready to help. What would you like to know about your documents?
                             </p>
                             <p class="text-xs text-gray-500 border-t border-gray-100 pt-2">
                                 AI can make mistakes. Please verify important information.
@@ -754,117 +740,90 @@
                 const message = input.value.trim();
                 
                 if (!message) return;
-                
-                // Ensure we have a current chat
-                if (!currentChatId) {
-                    startNewChat();
+
+                if (isNewChat) {
+                    createNewChatAndSendMessage(message);
+                } else {
+                    sendMessageToExistingChat(message);
                 }
-                
-                // Add user message to chat
-                const userMessage = {
-                    type: 'user',
-                    content: message,
-                    timestamp: new Date().toLocaleTimeString()
-                };
-                
-                addMessageToChat(userMessage);
-                
-                // Store in chat history
-                if (!chatHistory[currentChatId]) {
-                    chatHistory[currentChatId] = [];
-                }
-                chatHistory[currentChatId].push(userMessage);
-                
-                // Clear input
-                input.value = '';
-                updateCharCount();
-                
-                // Show typing indicator
-                showTypingIndicator();
-                
-                // Send to API
-                fetch('/api/query', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        question: message,
-                        chat_id: currentChatId
-                    })
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    hideTypingIndicator();
-                    
-                    if (data.error) {
-                        const errorMessage = {
-                            type: 'assistant',
-                            content: `Error: ${data.error}`,
-                            timestamp: new Date().toLocaleTimeString()
-                        };
-                        addStreamingMessage(errorMessage, () => {
-                            chatHistory[currentChatId].push(errorMessage);
-                            saveChatHistoryToStorage();
-                        });
-                    } else {
-                        const assistantMessage = {
-                            type: 'assistant',
-                            content: data.answer,
-                            timestamp: new Date().toLocaleTimeString(),
-                            sources: data.sources
-                        };
-                        
-                        // Use streaming effect for AI responses
-                        addStreamingMessage(assistantMessage, () => {
-                            // After streaming completes, add to chat history
-                            chatHistory[currentChatId].push(assistantMessage);
-                            // Update chat metadata
-                            updateChatMetadata(currentChatId, message);
-                            // Save to storage
-                            saveChatHistoryToStorage();
-                        });
-                    }
-                })
-                .catch(error => {
-                    hideTypingIndicator();
-                    console.error('Error:', error);
-                    const errorMessage = {
-                        type: 'assistant',
-                        content: `Sorry, I encountered an error: ${error.message}. Please try again.`,
-                        timestamp: new Date().toLocaleTimeString()
-                    };
-                    addStreamingMessage(errorMessage, () => {
-                        chatHistory[currentChatId].push(errorMessage);
-                        saveChatHistoryToStorage();
-                    });
-                });
             } catch (error) {
                 console.error('Error in sendMessage:', error);
-                hideTypingIndicator();
-                const errorMessage = {
-                    type: 'assistant',
-                    content: 'Sorry, I encountered an unexpected error. Please try again.',
-                    timestamp: new Date().toLocaleTimeString()
-                };
-                addMessageToChat(errorMessage);
-                if (currentChatId && chatHistory[currentChatId]) {
-                    chatHistory[currentChatId].push(errorMessage);
-                    saveChatHistoryToStorage();
-                }
             }
+        }
+
+        async function createNewChatAndSendMessage(message) {
+            const newChatId = `chat_${Date.now()}`;
+            const newChatTitle = message.substring(0, 30) + (message.length > 30 ? '...' : '');
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: newChatId, title: newChatTitle })
+                });
+
+                if (!response.ok) throw new Error('Failed to create chat');
+
+                const newChat = await response.json();
+                chats.unshift(newChat);
+                chatHistory[newChatId] = [];
+                
+                currentChatId = newChatId;
+                isNewChat = false;
+                
+                renderChats();
+                sendMessageToExistingChat(message);
+
+            } catch (error) {
+                console.error('Error creating new chat:', error);
+                alert('Could not start a new chat. Please try again.');
+            }
+        }
+
+        function sendMessageToExistingChat(message) {
+            const input = document.getElementById('messageInput');
+            const userMessage = {
+                type: 'user',
+                content: message,
+                timestamp: new Date().toLocaleTimeString()
+            };
+            
+            addMessageToChat(userMessage);
+            chatHistory[currentChatId].push(userMessage);
+
+            input.value = '';
+            updateCharCount();
+            showTypingIndicator();
+            
+            fetch('/api/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: message, chat_id: currentChatId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideTypingIndicator();
+                const assistantMessage = {
+                    type: 'assistant',
+                    content: data.answer,
+                    timestamp: new Date().toLocaleTimeString(),
+                    sources: data.sources
+                };
+                addMessageToChat(assistantMessage);
+                chatHistory[currentChatId].push(assistantMessage);
+                updateChatMetadata(currentChatId, message);
+            })
+            .catch(error => {
+                hideTypingIndicator();
+                console.error('Error:', error);
+            });
         }
         
         function updateChatMetadata(chatId, lastMessage) {
             const chat = chats.find(c => c.id === chatId);
             if (chat) {
-                chat.last_message = lastMessage || 'Just now';
-                chat.message_count = (chat.message_count || 0) + 1;
+                chat.last_message = lastMessage.substring(0, 20) + (lastMessage.length > 20 ? '...' : '');
+                chat.message_count = (chat.message_count || 0) + 2; // user + assistant
                 renderChats();
             }
         }
@@ -879,6 +838,9 @@
         
         function addMessageToChat(message) {
             const container = document.getElementById('chatMessages');
+            if (isNewChat && container.querySelector('.message-bubble')) {
+                container.innerHTML = ''; // Clear welcome message on first message
+            }
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message-bubble';
             
@@ -1129,20 +1091,38 @@
         
         function clearAllChats() {
             if (confirm('Are you sure you want to clear all chat history? This cannot be undone.')) {
-                chats = [];
-                chatHistory = {};
-                currentChatId = null;
-                
-                // Clear UI
-                renderChats();
-                clearChatMessages();
-                addWelcomeMessage();
-                updateCurrentChatTitle('');
-                
-                // Clear storage
-                saveChatHistoryToStorage();
-                
-                alert('All chats cleared successfully!');
+                // Clear from backend
+                fetch('/api/chat/clear', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Clear local data
+                        chats = [];
+                        chatHistory = {};
+                        currentChatId = null;
+                        
+                        // Clear UI
+                        renderChats();
+                        clearChatMessages();
+                        addWelcomeMessage();
+                        updateCurrentChatTitle('');
+                        
+                        // Clear localStorage
+                        localStorage.removeItem('recentChats');
+                        localStorage.removeItem('chatHistory');
+                        localStorage.removeItem('currentChatId');
+                        
+                        alert('All chats cleared successfully!');
+                    } else {
+                        alert('Failed to clear chats: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error clearing chats:', error);
+                    alert('Error clearing chats. Please try again.');
+                });
             }
         }
         
@@ -1151,29 +1131,26 @@
             console.log('Received message:', data);
         }
         
-        function deleteChat(chatId, event) {
+        function deleteChatWrapper(chatId, event) {
             event.stopPropagation();
-            
             if (confirm('Are you sure you want to delete this chat?')) {
-                // Remove from chats array
-                chats = chats.filter(c => c.id !== chatId);
-                
-                // Remove from chat history
-                delete chatHistory[chatId];
-                
-                // If this was the current chat, start a new one
-                if (currentChatId === chatId) {
-                    startNewChat();
-                }
-                
-                // Update UI
-                renderChats();
-                
-                // Save to storage
-                saveChatHistoryToStorage();
+                fetch(`/api/chat/${chatId}`, { method: 'DELETE' })
+                    .then(response => {
+                        if (response.ok) {
+                            chats = chats.filter(c => c.id !== chatId);
+                            delete chatHistory[chatId];
+                            renderChats();
+                            if (currentChatId === chatId) {
+                                setNewChatState();
+                            }
+                        } else {
+                            alert('Failed to delete chat.');
+                        }
+                    })
+                    .catch(error => console.error('Error deleting chat:', error));
             }
         }
-        
+
         function exportCurrentChat() {
             if (!currentChatId || !chatHistory[currentChatId]) {
                 alert('No chat to export.');

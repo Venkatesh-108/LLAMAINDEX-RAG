@@ -156,3 +156,7 @@ tmp/
 *.bak
 *.backup
 *~
+
+# Chat data (contains user conversations)
+data/
+*.json

@@ -28,7 +28,78 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global RAG system instance
 rag_system = None
-chat_sessions = {}
+
+# Chat history management
+
+CHAT_STORAGE_FILE = './data/chat_history.json'
+CHAT_SESSIONS_FILE = './data/chat_sessions.json'
+
+def ensure_data_directory():
+    """Ensure data directory exists"""
+    os.makedirs('./data', exist_ok=True)
+
+def load_chat_data():
+    """Load chat data from persistent storage"""
+    ensure_data_directory()
+
+    chat_data = {
+        'chats': [],
+        'chat_history': {},
+        'sessions': {}
+    }
+
+    # Load chats
+    if os.path.exists(CHAT_STORAGE_FILE):
+        try:
+            with open(CHAT_STORAGE_FILE, 'r') as f:
+                chat_data['chats'] = json.load(f)
+        except Exception as e:
+            app.logger.error(f"Error loading chat data: {e}")
+            chat_data['chats'] = []
+
+    # Load chat history
+    history_file = './data/chat_history_data.json'
+    if os.path.exists(history_file):
+        try:
+            with open(history_file, 'r') as f:
+                chat_data['chat_history'] = json.load(f)
+        except Exception as e:
+            app.logger.error(f"Error loading chat history: {e}")
+            chat_data['chat_history'] = {}
+
+    # Load sessions
+    if os.path.exists(CHAT_SESSIONS_FILE):
+        try:
+            with open(CHAT_SESSIONS_FILE, 'r') as f:
+                chat_data['sessions'] = json.load(f)
+        except Exception as e:
+            app.logger.error(f"Error loading sessions: {e}")
+            chat_data['sessions'] = {}
+
+    return chat_data
+
+def save_chat_data(chat_data):
+    """Save chat data to persistent storage"""
+    ensure_data_directory()
+
+    try:
+        # Save chats
+        with open(CHAT_STORAGE_FILE, 'w') as f:
+            json.dump(chat_data['chats'], f, indent=2)
+
+        # Save chat history
+        with open('./data/chat_history_data.json', 'w') as f:
+            json.dump(chat_data['chat_history'], f, indent=2)
+
+        # Save sessions
+        with open(CHAT_SESSIONS_FILE, 'w') as f:
+            json.dump(chat_data['sessions'], f, indent=2)
+
+    except Exception as e:
+        app.logger.error(f"Error saving chat data: {e}")
+
+# Global chat data
+chat_data = load_chat_data()
 
 # Sample data for demonstration
 SAMPLE_DOCUMENTS = [
@@ -74,29 +145,7 @@ SAMPLE_DOCUMENTS = [
     }
 ]
 
-SAMPLE_CHATS = [
-    {
-        "id": "chat_1",
-        "title": "SRM Installation Questions",
-        "document": "SRM Upgrade Guide.pdf",
-        "last_message": "2 hours ago",
-        "message_count": 15
-    },
-    {
-        "id": "chat_2",
-        "title": "Configuration Help",
-        "document": "Technical Specification.pdf", 
-        "last_message": "1 day ago",
-        "message_count": 8
-    },
-    {
-        "id": "chat_3",
-        "title": "Troubleshooting Support",
-        "document": "SRM Upgrade Guide.pdf",
-        "last_message": "3 days ago",
-        "message_count": 12
-    }
-]
+SAMPLE_CHATS = []
 
 def initialize_rag_system():
     """Initialize the RAG system"""
@@ -142,6 +191,76 @@ def get_time_ago(timestamp_str):
             return datetime.now()
     except:
         return datetime.now()
+
+def update_chat_metadata(chat_id, last_message):
+    """Update chat metadata (message count, last message, etc.)"""
+    try:
+        chats = chat_data['chats']
+        chat = next((c for c in chats if c['id'] == chat_id), None)
+
+        if chat:
+            chat['last_message'] = last_message[:50] + '...' if len(last_message) > 50 else last_message
+            chat['message_count'] = len(chat_data['chat_history'].get(chat_id, []))
+            chat['updated_at'] = datetime.now().timestamp() * 1000  # Store as milliseconds
+        else:
+            # Create new chat entry if it doesn't exist
+            new_chat = {
+                'id': chat_id,
+                'title': f'Chat {datetime.now().strftime("%H:%M")}',
+                'document': 'General',
+                'last_message': last_message[:50] + '...' if len(last_message) > 50 else last_message,
+                'message_count': len(chat_data['chat_history'].get(chat_id, [])),
+                'created_at': datetime.now().timestamp() * 1000,
+                'updated_at': datetime.now().timestamp() * 1000
+            }
+            chats.append(new_chat)
+
+        # Sort chats by updated_at (most recent first)
+        chats.sort(key=lambda x: x.get('updated_at', 0), reverse=True)
+
+    except Exception as e:
+        app.logger.error(f"Error updating chat metadata: {e}")
+
+@app.route('/api/chat', methods=['POST'])
+def create_chat():
+    """Create a new chat session."""
+    try:
+        data = request.json
+        chat_id = data.get('id')
+        title = data.get('title')
+
+        if not chat_id or not title:
+            return jsonify({"error": "Missing chat_id or title"}), 400
+
+        new_chat = {
+            "id": chat_id,
+            "title": title,
+            "document": "General",
+            "last_message": "Chat created",
+            "message_count": 0,
+            "created_at": datetime.now().isoformat()
+        }
+        chat_data['chats'].insert(0, new_chat)
+        chat_data['chat_history'][chat_id] = []
+        save_chat_data(chat_data)
+        
+        return jsonify(new_chat), 201
+    except Exception as e:
+        app.logger.error(f"Error creating chat: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/chat/<chat_id>', methods=['DELETE'])
+def delete_chat(chat_id):
+    """Delete a chat session."""
+    try:
+        chat_data['chats'] = [chat for chat in chat_data['chats'] if chat['id'] != chat_id]
+        if chat_id in chat_data['chat_history']:
+            del chat_data['chat_history'][chat_id]
+        save_chat_data(chat_data)
+        return jsonify({"message": "Chat deleted"}), 200
+    except Exception as e:
+        app.logger.error(f"Error deleting chat: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/')
 def index():
@@ -192,9 +311,9 @@ def get_documents():
 def get_chats():
     """Get list of recent chats"""
     try:
-        # Return sample chats for now
-        # In production, this would come from a database
-        return jsonify(SAMPLE_CHATS)
+        # Return stored chats, or empty list if none exist
+        chats = chat_data['chats']
+        return jsonify(chats)
     except Exception as e:
         app.logger.error(f"Error getting chats: {e}")
         return jsonify([])
@@ -203,23 +322,14 @@ def get_chats():
 def get_chat_history(chat_id):
     """Get chat history for a specific chat"""
     try:
-        # Return sample chat history
-        # In production, this would come from a database
-        sample_history = [
-            {
-                "id": "msg_1",
-                "type": "user",
-                "content": "How do I install Dell SRM?",
-                "timestamp": "2 hours ago"
-            },
-            {
-                "id": "msg_2", 
-                "type": "assistant",
-                "content": "To install Dell SRM, you'll need to follow these steps:\n\n1. Ensure your system meets the minimum requirements\n2. Download the installation package\n3. Run the installer with appropriate permissions\n4. Configure the initial settings\n\nWould you like me to provide more specific details about any of these steps?",
-                "timestamp": "2 hours ago"
-            }
-        ]
-        return jsonify(sample_history)
+        # Get stored chat history, or return empty array for new chats
+        chat_history_data = chat_data['chat_history']
+
+        if chat_id in chat_history_data and chat_history_data[chat_id]:
+            return jsonify(chat_history_data[chat_id])
+
+        # Return empty array for new chats
+        return jsonify([])
     except Exception as e:
         app.logger.error(f"Error getting chat history: {e}")
         return jsonify([])
@@ -255,20 +365,35 @@ def process_query():
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
-        # Store in chat session if chat_id provided
+        # Store in chat history if chat_id provided
         if chat_id != 'new':
-            if chat_id not in chat_sessions:
-                chat_sessions[chat_id] = []
-            chat_sessions[chat_id].append({
+            if chat_id not in chat_data['chat_history']:
+                chat_data['chat_history'][chat_id] = []
+
+            # Add user message
+            chat_data['chat_history'][chat_id].append({
+                "id": f"msg_{len(chat_data['chat_history'][chat_id]) + 1}",
                 "type": "user",
                 "content": question,
                 "timestamp": response["timestamp"]
             })
-            chat_sessions[chat_id].append({
-                "type": "assistant", 
+
+            # Add assistant message
+            chat_data['chat_history'][chat_id].append({
+                "id": f"msg_{len(chat_data['chat_history'][chat_id]) + 1}",
+                "type": "assistant",
                 "content": response["answer"],
-                "timestamp": response["timestamp"]
+                "timestamp": response["timestamp"],
+                "sources": result.get("sources", []),
+                "responseTime": result.get("query_time", 0) * 1000,  # Convert to milliseconds
+                "modelUsed": "llama3.2:3b"
             })
+
+            # Update chat metadata
+            update_chat_metadata(chat_id, question)
+
+            # Save to persistent storage
+            save_chat_data(chat_data)
         
         return jsonify(response)
         
@@ -323,12 +448,34 @@ def upload_document():
         app.logger.error(f"Error uploading document: {e}")
         return jsonify({"error": "Upload failed"}), 500
 
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_all_chats():
+    """Clear all chats and chat history"""
+    try:
+        # Clear all data
+        chat_data['chats'] = []
+        chat_data['chat_history'] = {}
+        chat_data['sessions'] = {}
+        
+        # Save empty data
+        save_chat_data(chat_data)
+        
+        return jsonify({
+            "success": True,
+            "message": "All chats cleared successfully"
+        })
+    except Exception as e:
+        app.logger.error(f"Error clearing chats: {e}")
+        return jsonify({"error": "Failed to clear chats"}), 500
+
 @app.route('/api/health')
 def health_check():
     """Health check endpoint"""
     return jsonify({
         "status": "healthy",
         "rag_system": rag_system is not None,
+        "chat_count": len(chat_data['chats']),
+        "total_messages": sum(len(messages) for messages in chat_data['chat_history'].values()),
         "timestamp": datetime.now().isoformat()
     })
 
