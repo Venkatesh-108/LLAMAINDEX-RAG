@@ -82,6 +82,18 @@
             background-color: #cbd5e1;
         }
 
+        .sources-toggle {
+            cursor: pointer;
+        }
+        
+        .sources-toggle .toggle-icon {
+            transition: transform 0.2s ease-in-out;
+        }
+        
+        .sources-toggle.collapsed .toggle-icon {
+            transform: rotate(-90deg);
+        }
+
         /* Ensure user messages are visible */
         .message-bubble .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -716,6 +728,15 @@
                         showErrorMessage('Could not find the original query to retry.');
                     }
                 }
+                
+                const sourcesToggle = event.target.closest('.sources-toggle');
+                if (sourcesToggle) {
+                    const sourcesContent = sourcesToggle.nextElementSibling;
+                    if (sourcesContent) {
+                        sourcesContent.classList.toggle('hidden');
+                        sourcesToggle.classList.toggle('collapsed');
+                    }
+                }
             });
         }
         
@@ -1113,16 +1134,22 @@
             
             let sourcesHtml = '';
             if (!isUser && message.sources && message.sources.length > 0) {
+                const messageId = `msg-${Date.now()}`;
                 sourcesHtml = `
                     <div class="mt-2 pt-2 border-t border-gray-200">
-                        <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
-                        <div class="space-y-1">
-                            ${message.sources.map(source => `
-                                <div class="text-xs text-gray-500">
-                                    <span class="font-medium">${source.filename}</span> 
-                                    (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
-                                </div>
-                            `).join('')}
+                        <div class="sources-toggle collapsed flex items-center justify-between text-xs font-medium text-gray-600">
+                            <span>Sources (${message.sources.length})</span>
+                            <i class="fas fa-chevron-down toggle-icon"></i>
+                        </div>
+                        <div class="sources-content hidden">
+                            <div class="space-y-1 mt-2">
+                                ${message.sources.map(source => `
+                                    <div class="text-xs text-gray-500">
+                                        <span class="font-medium">${source.filename}</span> 
+                                        (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1211,14 +1238,19 @@
                 if (sources && sources.length > 0) {
                     const sourcesHtml = `
                         <div class="mt-2 pt-2 border-t border-gray-200">
-                            <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
-                            <div class="space-y-1">
-                                ${sources.map(source => `
-                                    <div class="text-xs text-gray-500">
-                                        <span class="font-medium">${source.filename}</span> 
-                                        (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
-                                    </div>
-                                `).join('')}
+                            <div class="sources-toggle collapsed flex items-center justify-between text-xs font-medium text-gray-600">
+                                <span>Sources (${sources.length})</span>
+                                <i class="fas fa-chevron-down toggle-icon"></i>
+                            </div>
+                            <div class="sources-content hidden">
+                                <div class="space-y-1 mt-2">
+                                    ${sources.map(source => `
+                                        <div class="text-xs text-gray-500">
+                                            <span class="font-medium">${source.filename}</span> 
+                                            (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
+                                        </div>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
                     `;
