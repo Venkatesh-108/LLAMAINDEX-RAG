@@ -468,7 +468,7 @@ def clear_all_chats():
         return jsonify({
             "success": True,
             "message": "All chats cleared successfully"
-        })
+        }), 200
     except Exception as e:
         app.logger.error(f"Error clearing chats: {e}")
         return jsonify({"error": "Failed to clear chats"}), 500

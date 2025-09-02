@@ -175,7 +175,8 @@ class DellSRMDocumentProcessor:
         self.pdf_reader = PDFReader()
         self.text_splitter = SentenceSplitter(
             chunk_size=config.chunk_size,
-            chunk_overlap=config.chunk_overlap
+            chunk_overlap=config.chunk_overlap,
+            separator="\\n\\n"  # Split by paragraphs for better semantic coherence
         )
         
         # Dell SRM specific patterns
@@ -429,6 +430,74 @@ class DellSRMDocumentProcessor:
             return 'solutionpack_guide'
         else:
             return 'general_guide'
+
+class ContextFilter:
+    """Filters and ranks passages based on relevance and quality"""
+    
+    def __init__(self):
+        self.quality_indicators = [
+            "step", "procedure", "configuration", "requirement",
+            "installation", "troubleshoot", "error", "solution",
+            "note:", "warning:", "important:"
+        ]
+
+    def filter_and_rank(self, query: str, passages: List) -> List:
+        """Filter and rank passages"""
+        
+        filtered_passages = []
+        query_lower = query.lower()
+        
+        for passage in passages:
+            passage_text = getattr(passage, 'text', '')
+            passage_score = getattr(passage, 'score', 0.0)
+            
+            # Calculate quality score
+            quality_score = self._calculate_quality(passage_text, query_lower)
+            
+            # Combine original score with quality score
+            combined_score = (passage_score * 0.6) + (quality_score * 0.4)
+            
+            # Add combined score to passage metadata for ranking
+            if hasattr(passage, 'metadata'):
+                passage.metadata['combined_score'] = combined_score
+            else:
+                # If no metadata, create a simple object to hold it
+                passage.combined_score = combined_score
+            
+            filtered_passages.append(passage)
+            
+        # Sort by the new combined score
+        return sorted(
+            filtered_passages, 
+            key=lambda p: getattr(p, 'metadata', {}).get('combined_score', getattr(p, 'combined_score', 0.0)), 
+            reverse=True
+        )
+
+    def _calculate_quality(self, text: str, query: str) -> float:
+        """Calculate quality score for a passage"""
+        text_lower = text.lower()
+        
+        # Technical content indicators
+        technical_score = sum(
+            1 for indicator in self.quality_indicators 
+            if indicator in text_lower
+        ) / len(self.quality_indicators)
+        
+        # Query term overlap
+        query_terms = set(query.split())
+        text_terms = set(text_lower.split())
+        
+        if not query_terms:
+            overlap = 0.0
+        else:
+            overlap = len(query_terms.intersection(text_terms)) / len(query_terms)
+        
+        # Content length (prefer substantial content)
+        length_score = min(len(text.split()) / 150, 1.0) # Prefer chunks of at least 150 words
+        
+        # Final weighted score
+        return (technical_score * 0.45 + overlap * 0.35 + length_score * 0.2)
+
 
 class EnhancedRetriever:
     """Enhanced retrieval techniques compatible with current LlamaIndex version"""
@@ -705,6 +774,7 @@ class DellSRMRAG:
         self.ollama_manager = OllamaManager(self.config.ollama_host)
         self.doc_processor = DellSRMDocumentProcessor(self.config)
         self.vector_store = RAGVectorStore(self.config)
+        self.context_filter = ContextFilter()  # Add context filter
         self.query_engine = None
         self.setup_logging()
         
@@ -853,9 +923,14 @@ class DellSRMRAG:
             relevant_sources = []
 
             if hasattr(response, 'source_nodes') and response.source_nodes:
+                # Filter and rank sources
+                ranked_sources = self.context_filter.filter_and_rank(
+                    enhanced_query, response.source_nodes
+                )
+                
                 # Filter sources that meet minimum similarity threshold
                 min_similarity = 0.3  # Minimum similarity threshold
-                for node in response.source_nodes:
+                for node in ranked_sources:
                     similarity_score = getattr(node, 'score', 0.0)
                     if similarity_score >= min_similarity:
                         relevant_sources.append(node)
@@ -901,52 +976,61 @@ class DellSRMRAG:
             return {"error": f"Query failed: {str(e)}"}
     
     def _enhance_query(self, question: str) -> str:
-        """Enhance query for better retrieval accuracy"""
-        # Add Dell SRM specific context and keywords
-        srm_keywords = [
-            "Dell SRM", "Storage Resource Management", "SolutionPack",
-            "host discovery", "fabric", "WWN", "storage monitoring",
-            "alert", "configuration", "troubleshooting"
-        ]
+        """Enhance query for better retrieval accuracy using the LLM"""
+        
+        try:
+            prompt = f"""
+            Analyze the following user query about Dell SRM. Generate 3-5 alternative queries
+            that are more specific, include technical synonyms, and are optimized for
+            vector search in technical documentation.
 
-        enhanced_query = question
+            Original Query: "{question}"
 
-        # Add relevant keywords if they're not already present
-        for keyword in srm_keywords:
-            if keyword.lower() in question.lower():
-                continue
-            # Add context for technical queries
-            if any(tech_term in question.lower() for tech_term in
-                   ["install", "setup", "configure", "troubleshoot", "monitor"]):
-                enhanced_query += f" {keyword}"
+            Return ONLY the alternative queries, separated by newlines.
+            Example format:
+            enhanced query 1
+            enhanced query 2
+            enhanced query 3
+            """.strip()
+            
+            # Use a smaller, faster model for this task if available
+            enhancement_llm = Ollama(
+                model="llama3:8b", # Or a smaller model like tinyllama
+                base_url=self.config.ollama_host,
+                temperature=0.2,
+                request_timeout=30
+            )
 
-        return enhanced_query.strip()
+            response = enhancement_llm.complete(prompt)
+            
+            # Combine original question with enhanced versions
+            enhanced_queries = response.text.strip().split('\\n')
+            combined_query = question + " " + " ".join(enhanced_queries)
+            
+            return combined_query
+
+        except Exception as e:
+            self.logger.warning(f"LLM-based query enhancement failed: {e}. Using basic enhancement.")
+            return question # Fallback to original question
 
     def _create_enhanced_prompt(self, question: str) -> str:
         """Create enhanced prompt for Dell SRM context"""
         prompt_template = """
-You are an expert assistant for Dell SRM (Storage Resource Management) documentation.
+You are a technical documentation expert for Dell SRM systems. Your primary goal is to provide accurate, factual answers based exclusively on the provided context.
 
-When answering questions about Dell SRM:
+ACCURACY REQUIREMENTS:
+1.  **Answer ONLY based on the provided context.** Do not use any prior knowledge.
+2.  If the context is insufficient to answer the question, you MUST explicitly state: "The provided documentation does not contain sufficient information to answer this question."
+3.  Use the exact technical terms, component names, and procedures found in the documentation.
+4.  When available, include specific steps, requirements, or configuration details in your answer.
+5.  Cite source information when referencing specific details, if possible.
 
-1. FOCUS ON ACCURACY: Only provide information found in the Dell SRM documentation
-2. BE SPECIFIC: Reference specific features, procedures, and configurations
-3. USE TECHNICAL TERMS: Employ proper Dell SRM terminology (SolutionPacks, WWN, Fabric, etc.)
-4. PROVIDE CONTEXT: Include relevant background information when helpful
-5. STRUCTURE CLEARLY: Organize complex answers with clear sections
-6. FLAG LIMITATIONS: State if information is incomplete or requires additional context
+USER QUESTION:
+{question}
 
-Dell SRM Key Areas:
-- Installation and System Requirements
-- SolutionPack Configuration
-- Storage Monitoring and Reporting  
-- Host Discovery and Fabric Management
-- Alert Configuration and Troubleshooting
-- User Interface and Navigation
+Based on the user's question and the context that will be provided, formulate a comprehensive and technically accurate response. If the information is not available, state it clearly.
 
-User Question: {question}
-
-Provide a comprehensive, accurate answer based on the Dell SRM documentation:
+TECHNICAL RESPONSE:
         """.strip()
         
         return prompt_template.format(question=question)
