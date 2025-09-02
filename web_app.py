@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, Response
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import uuid
 
@@ -465,10 +465,12 @@ def clear_all_chats():
         # Save empty data
         save_chat_data(chat_data)
         
-        return jsonify({
+        response_data = {
             "success": True,
             "message": "All chats cleared successfully"
-        }), 200
+        }
+        return Response(json.dumps(response_data), status=200, mimetype='application/json')
+
     except Exception as e:
         app.logger.error(f"Error clearing chats: {e}")
         return jsonify({"error": "Failed to clear chats"}), 500
@@ -504,6 +506,64 @@ def on_message(data):
     """Handle real-time messages"""
     room = data['room']
     emit('message', data, room=room)
+
+@socketio.on('stream_query')
+def handle_stream_query(data):
+    """Handle a streaming query from the client"""
+    question = data.get('question', '').strip()
+    chat_id = data.get('chat_id')
+    sid = request.sid
+
+    if not question or not rag_system:
+        emit('stream_error', {'error': 'Invalid request or RAG system not ready'}, room=sid)
+        return
+
+    try:
+        full_response = ""
+        for response_part in rag_system.stream_query(question):
+            if response_part['type'] == 'token':
+                token = response_part['content']
+                full_response += token
+                emit('stream_token', {'token': token}, room=sid)
+            
+            elif response_part['type'] == 'end':
+                # Save the full response to chat history
+                if chat_id:
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # Add user message
+                    if chat_id not in chat_data['chat_history']:
+                        chat_data['chat_history'][chat_id] = []
+                    
+                    chat_data['chat_history'][chat_id].append({
+                        "id": f"msg_{len(chat_data['chat_history'][chat_id]) + 1}",
+                        "type": "user",
+                        "content": question,
+                        "timestamp": timestamp
+                    })
+                    
+                    # Add full assistant message
+                    chat_data['chat_history'][chat_id].append({
+                        "id": f"msg_{len(chat_data['chat_history'][chat_id]) + 1}",
+                        "type": "assistant",
+                        "content": full_response,
+                        "timestamp": timestamp,
+                        "sources": response_part['sources'],
+                        "modelUsed": rag_system.config.llm_model
+                    })
+                    
+                    update_chat_metadata(chat_id, question)
+                    save_chat_data(chat_data)
+                
+                emit('stream_end', {'sources': response_part['sources']}, room=sid)
+
+            elif response_part['type'] == 'error':
+                emit('stream_error', {'error': response_part['content']}, room=sid)
+
+    except Exception as e:
+        app.logger.error(f"Error during stream_query: {e}")
+        emit('stream_error', {'error': 'An internal error occurred during streaming.'}, room=sid)
+
 
 if __name__ == '__main__':
     # Setup logging

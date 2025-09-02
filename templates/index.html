@@ -47,8 +47,40 @@
             border-radius: 18px 18px 18px 4px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             border: 1px solid #e5e7eb;
+            position: relative;
         }
         
+        .message-actions {
+            position: absolute;
+            bottom: -10px;
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        
+        .message-bubble:hover .message-actions {
+            opacity: 1;
+        }
+        
+        .action-btn {
+            background-color: #e2e8f0;
+            color: #475569;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: background-color 0.2s ease;
+        }
+        
+        .action-btn:hover {
+            background-color: #cbd5e1;
+        }
+
         /* Ensure user messages are visible */
         .message-bubble .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -112,6 +144,11 @@
             to { opacity: 1; }
         }
         
+        .fade-in-token {
+            display: inline-block;
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
         @keyframes fadeInUp {
             from {
                 opacity: 0;
@@ -518,6 +555,18 @@
             socket.on('message', (data) => {
                 handleIncomingMessage(data);
             });
+            
+            socket.on('stream_token', (data) => {
+                appendTokenToLastMessage(data.token);
+            });
+            
+            socket.on('stream_end', (data) => {
+                finalizeStreamingMessage(data.sources);
+            });
+
+            socket.on('stream_error', (data) => {
+                handleStreamingError(data.error);
+            });
         }
         
         function setupEventListeners() {
@@ -630,6 +679,26 @@
             messageInput.addEventListener('input', function() {
                 this.style.height = 'auto';
                 this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+
+            // Event delegation for copy and retry buttons
+            document.getElementById('chatMessages').addEventListener('click', function(event) {
+                const copyBtn = event.target.closest('.copy-btn');
+                if (copyBtn) {
+                    const messageContent = copyBtn.closest('.message-content-wrapper').querySelector('.message-text').textContent;
+                    navigator.clipboard.writeText(messageContent).then(() => {
+                        showSuccessMessage('Copied to clipboard!');
+                    }, () => {
+                        showErrorMessage('Failed to copy.');
+                    });
+                }
+                
+                const retryBtn = event.target.closest('.retry-btn');
+                if (retryBtn) {
+                    const messageContent = retryBtn.closest('.message-content-wrapper').querySelector('.message-text').textContent;
+                    // Re-send the message. We can just call sendMessage with the content.
+                    sendMessage(messageContent);
+                }
             });
         }
         
@@ -913,18 +982,25 @@
             container.appendChild(contextDiv);
         }
         
-        function sendMessage() {
+        function sendMessage(messageOverride) {
             try {
                 const input = document.getElementById('messageInput');
-                const message = input.value.trim();
+                const message = typeof messageOverride === 'string' ? messageOverride : input.value.trim();
                 
                 if (!message) return;
 
                 if (isNewChat) {
+                    // Pass the original message to the new chat function
                     createNewChatAndSendMessage(message);
                 } else {
                     sendMessageToExistingChat(message);
                 }
+
+                if (typeof messageOverride !== 'string') {
+                    input.value = '';
+                    updateCharCount();
+                }
+
             } catch (error) {
                 console.error('Error in sendMessage:', error);
             }
@@ -960,7 +1036,6 @@
         }
 
         function sendMessageToExistingChat(message) {
-            const input = document.getElementById('messageInput');
             const userMessage = {
                 type: 'user',
                 content: message,
@@ -968,40 +1043,17 @@
             };
             
             addMessageToChat(userMessage);
-            chatHistory[currentChatId].push(userMessage);
+            // Don't save user message to history here, backend will do it.
 
-            input.value = '';
-            updateCharCount();
             showTypingIndicator();
             
-            // Get current response style setting
             const responseStyle = localStorage.getItem('responseStyle') || 'concise';
             
-            fetch('/api/query', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    question: message, 
-                    chat_id: currentChatId,
-                    response_style: responseStyle
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                hideTypingIndicator();
-                const assistantMessage = {
-                    type: 'assistant',
-                    content: data.answer,
-                    timestamp: new Date().toLocaleTimeString(),
-                    sources: data.sources
-                };
-                addMessageToChat(assistantMessage);
-                chatHistory[currentChatId].push(assistantMessage);
-                updateChatMetadata(currentChatId, message);
-            })
-            .catch(error => {
-                hideTypingIndicator();
-                console.error('Error:', error);
+            // Use Socket.IO for streaming
+            socket.emit('stream_query', {
+                question: message,
+                chat_id: currentChatId,
+                response_style: responseStyle
             });
         }
         
@@ -1041,7 +1093,7 @@
             const textColor = isUser ? 'text-white' : 'text-gray-700';
             
             let sourcesHtml = '';
-            if (message.sources && message.sources.length > 0) {
+            if (!isUser && message.sources && message.sources.length > 0) {
                 sourcesHtml = `
                     <div class="mt-2 pt-2 border-t border-gray-200">
                         <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
@@ -1056,10 +1108,12 @@
                     </div>
                 `;
             }
+
+            const messageId = `msg-${Date.now()}`;
             
             messageDiv.innerHTML = `
                 <div class="flex ${alignment} mb-6">
-                    <div class="flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''} max-w-3xl">
+                    <div class="flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''} max-w-3xl group">
                         ${!isUser ? `
                             <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
                                 <i class="fas fa-brain text-white text-sm"></i>
@@ -1069,14 +1123,18 @@
                                 <i class="fas fa-user text-white text-sm"></i>
                             </div>
                         `}
-                        <div class="flex-1 ${isUser ? 'text-right' : ''}">
+                        <div class="flex-1 ${isUser ? 'text-right' : ''} message-content-wrapper">
                             <div class="flex items-center space-x-2 mb-2 ${isUser ? 'justify-end' : ''}">
                                 <span class="font-semibold ${isUser ? 'text-gray-700' : 'text-gray-700'} text-sm">${isUser ? 'You' : 'AI Assistant'}</span>
                                 <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">${message.timestamp}</span>
                             </div>
-                            <div class="${isUser ? 'user-message' : 'assistant-message'} p-4 ${isUser ? 'ml-auto' : ''} max-w-2xl">
-                                <div class="whitespace-pre-wrap text-sm leading-relaxed">${message.content}</div>
+                            <div class="${isUser ? 'user-message' : 'assistant-message'} p-4 ${isUser ? 'ml-auto' : ''} max-w-2xl relative">
+                                <div class="message-text whitespace-pre-wrap text-sm leading-relaxed">${message.content}</div>
                                 ${sourcesHtml}
+                                <div class="message-actions ${isUser ? 'left-0' : 'right-0'}">
+                                    <button class="action-btn copy-btn" title="Copy"><i class="fas fa-copy"></i></button>
+                                    ${isUser ? `<button class="action-btn retry-btn" title="Retry"><i class="fas fa-redo"></i></button>` : ''}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1087,96 +1145,84 @@
             container.scrollTop = container.scrollHeight;
         }
         
-        function addStreamingMessage(message, onComplete) {
+        function appendTokenToLastMessage(token) {
+            // Ensure typing indicator is hidden
+            hideTypingIndicator();
+            
+            // Find the last message bubble
             const container = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message-bubble streaming-message';
+            let lastMessageBubble = container.querySelector('.streaming-message-content');
             
-            const isUser = message.type === 'user';
-            const alignment = isUser ? 'justify-end' : 'justify-start';
-            const bgColor = isUser ? 'gradient-bg text-white' : 'bg-white';
-            const textColor = isUser ? 'text-white' : 'text-gray-700';
-            
-            // Create initial message structure
-            messageDiv.innerHTML = `
-                <div class="flex ${alignment} mb-4">
-                    <div class="flex items-start space-x-2 ${isUser ? 'flex-row-reverse space-x-reverse' : ''} max-w-2xl">
-                        ${!isUser ? `
-                            <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
-                                <i class="fas fa-brain text-white text-xs"></i>
-                            </div>
-                        ` : `
-                            <div class="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                <i class="fas fa-user text-white text-xs"></i>
-                            </div>
-                        `}
-                        <div class="flex-1 ${isUser ? 'text-right' : ''}">
-                            <div class="flex items-center space-x-2 mb-1 ${isUser ? 'justify-end' : ''}">
-                                <span class="font-medium ${isUser ? 'text-gray-800' : 'text-gray-800'} text-sm">${isUser ? 'You' : 'AI Document Assistant'}</span>
-                                <span class="text-xs text-gray-500">${message.timestamp}</span>
-                            </div>
-                            <div class="${bgColor} rounded-lg p-3 shadow-sm ${!isUser ? 'border border-gray-200' : ''} ${isUser ? 'ml-auto' : ''}">
-                                <div class="${textColor} whitespace-pre-wrap text-sm">
-                                    <span class="streaming-content"></span>
-                                    <span class="streaming-cursor">|</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            container.appendChild(messageDiv);
-            container.scrollTop = container.scrollHeight;
-            
-            // Start streaming effect
-            if (!isUser && message.content) {
-                const contentElement = messageDiv.querySelector('.streaming-content');
-                const cursorElement = messageDiv.querySelector('.streaming-cursor');
-                let currentIndex = 0;
-                
-                function streamNextCharacter() {
-                    if (currentIndex < message.content.length) {
-                        contentElement.textContent += message.content[currentIndex];
-                        currentIndex++;
-                        
-                        // Add slight delay for natural typing effect
-                        setTimeout(streamNextCharacter, 20 + Math.random() * 30);
-                    } else {
-                        // Streaming complete
-                        cursorElement.style.display = 'none';
-                        
-                        // Add sources if available
-                        if (message.sources && message.sources.length > 0) {
-                            const sourcesHtml = `
-                                <div class="mt-2 pt-2 border-t border-gray-200">
-                                    <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
-                                    <div class="space-y-1">
-                                        ${message.sources.map(source => `
-                                            <div class="text-xs text-gray-500">
-                                                <span class="font-medium">${source.filename}</span> 
-                                                (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            `;
-                            contentElement.insertAdjacentHTML('afterend', sourcesHtml);
-                        }
-                        
-                        if (onComplete) onComplete();
-                    }
-                }
-                
-                // Start streaming after a brief delay
-                setTimeout(streamNextCharacter, 100);
+            // If it doesn't exist, create it
+            if (!lastMessageBubble) {
+                const assistantMessage = {
+                    type: 'assistant',
+                    content: '', // Start with empty content
+                    timestamp: new Date().toLocaleTimeString()
+                };
+                addMessageToChat(assistantMessage);
+                // Select the content div of the newly added message
+                const allMessages = container.querySelectorAll('.assistant-message');
+                const lastMessageContainer = allMessages[allMessages.length-1];
+                lastMessageBubble = lastMessageContainer.querySelector('.message-text');
+                lastMessageBubble.classList.add('streaming-message-content');
+                lastMessageBubble.textContent = ''; // Clear any initial content
             }
             
-            return messageDiv;
+            // Append the new token with a fade-in animation
+            const tokenSpan = document.createElement('span');
+            tokenSpan.className = 'fade-in-token';
+            tokenSpan.textContent = token;
+            lastMessageBubble.appendChild(tokenSpan);
+            
+            container.scrollTop = container.scrollHeight;
         }
-        
+
+        function finalizeStreamingMessage(sources) {
+            const container = document.getElementById('chatMessages');
+            const streamingContent = container.querySelector('.streaming-message-content');
+            
+            if (streamingContent) {
+                // Remove the streaming class
+                streamingContent.classList.remove('streaming-message-content');
+
+                // Add sources if available
+                if (sources && sources.length > 0) {
+                    const sourcesHtml = `
+                        <div class="mt-2 pt-2 border-t border-gray-200">
+                            <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
+                            <div class="space-y-1">
+                                ${sources.map(source => `
+                                    <div class="text-xs text-gray-500">
+                                        <span class="font-medium">${source.filename}</span> 
+                                        (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                    streamingContent.parentElement.insertAdjacentHTML('beforeend', sourcesHtml);
+                }
+            }
+            
+            // The chat history is saved on the backend, but we need to update the UI
+            // to show the latest chat activity on the sidebar.
+            loadInitialData();
+        }
+
+        function handleStreamingError(error) {
+            hideTypingIndicator();
+            showErrorMessage(error || 'An error occurred during streaming.');
+        }
+
         function showTypingIndicator() {
             const container = document.getElementById('chatMessages');
+            // Remove any existing indicator first
+            const existingIndicator = container.querySelector('#typingIndicator');
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
+
             const typingDiv = document.createElement('div');
             typingDiv.id = 'typingIndicator';
             typingDiv.className = 'message-bubble';

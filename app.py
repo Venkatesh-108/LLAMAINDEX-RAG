@@ -696,7 +696,7 @@ class RAGVectorStore:
                         retriever=base_retriever,
                         node_postprocessors=[similarity_filter],
                         response_mode="tree_summarize",  # Better for technical documentation
-                        use_async=True,
+                        streaming=True, # Enable streaming
                         verbose=True  # Enable verbose mode for debugging
                     )
 
@@ -975,6 +975,50 @@ class DellSRMRAG:
             self.logger.error(f"Query failed: {e}")
             return {"error": f"Query failed: {str(e)}"}
     
+    def stream_query(self, question: str):
+        """Streaming query the RAG system"""
+        if not self.query_engine:
+            yield {"type": "error", "content": "RAG system not initialized"}
+            return
+
+        try:
+            enhanced_query = self._enhance_query(question)
+            enhanced_prompt = self._create_enhanced_prompt(enhanced_query)
+
+            # With streaming=True in the engine, .query() returns a StreamingResponse
+            streaming_response = self.query_engine.query(enhanced_prompt)
+            
+            # Stream tokens
+            for token in streaming_response.response_gen:
+                yield {"type": "token", "content": token}
+            
+            # Once streaming is done, process and yield sources
+            source_nodes = streaming_response.source_nodes
+            relevant_sources = []
+            if source_nodes:
+                ranked_sources = self.context_filter.filter_and_rank(enhanced_query, source_nodes)
+                min_similarity = 0.3
+                for node in ranked_sources:
+                    if getattr(node, 'score', 0.0) >= min_similarity:
+                        relevant_sources.append(node)
+
+            sources_data = []
+            for i, node in enumerate(relevant_sources[:5]):
+                sources_data.append({
+                    "source_id": i + 1,
+                    "filename": node.metadata.get('filename', 'Unknown'),
+                    "content_type": node.metadata.get('content_type', 'text'),
+                    "document_type": node.metadata.get('document_type', 'general'),
+                    "similarity_score": getattr(node, 'score', 0.0),
+                    "excerpt": node.text[:200] + "..." if len(node.text) > 200 else node.text
+                })
+            
+            yield {"type": "end", "sources": sources_data}
+            
+        except Exception as e:
+            self.logger.error(f"Streaming query failed: {e}")
+            yield {"type": "error", "content": f"Streaming query failed: {str(e)}"}
+
     def _enhance_query(self, question: str) -> str:
         """Enhance query for better retrieval accuracy using the LLM"""
         
