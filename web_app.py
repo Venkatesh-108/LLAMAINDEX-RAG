@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import uuid
 
@@ -266,6 +266,11 @@ def delete_chat(chat_id):
 def index():
     """Main application page"""
     return render_template('index.html')
+
+@app.route('/documents/<path:filename>')
+def serve_document(filename):
+    """Serve documents from the documents directory"""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/api/documents')
 def get_documents():

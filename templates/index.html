@@ -30,7 +30,23 @@
         
         .message-bubble {
             animation: fadeInUp 0.3s ease-out;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        /* Enhanced message styling */
+        .message-bubble .user-message {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 18px 18px 4px 18px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .message-bubble .assistant-message {
+            background: white;
+            color: #374151;
+            border-radius: 18px 18px 18px 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e5e7eb;
         }
         
         /* Ensure user messages are visible */
@@ -49,6 +65,26 @@
         
         .message-bubble .ml-auto {
             margin-left: auto;
+        }
+        
+        /* Enhanced hover effects */
+        .send-button-hover {
+            transition: all 0.2s ease;
+        }
+        
+        .send-button-hover:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* Improved input field styling */
+        .enhanced-input {
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .enhanced-input:focus {
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
         }
         
         /* Streaming cursor animation */
@@ -154,13 +190,80 @@
         .sidebar-separator {
             border-left: 2px solid #e5e7eb;
             margin-left: 0;
-            box-shadow: -2px 0 4px rgba(0, 0, 0, 0.05);
+            box-shadow: -2px 0 8px rgba(0, 0, 0, 0.08);
         }
         
         /* Improve sidebar spacing */
         .sidebar-gradient {
             background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
-            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Enhanced button styles */
+        .enhanced-button {
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .enhanced-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .enhanced-button:hover::before {
+            left: 100%;
+        }
+        
+        /* Improved document and chat items */
+        .enhanced-item {
+            transition: all 0.2s ease;
+            border-radius: 12px;
+        }
+        
+        .enhanced-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Enhanced welcome interface styles */
+        .welcome-hero {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-radius: 24px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .action-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .action-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        .document-preview-card {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .document-preview-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .chat-item p {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     </style>
 </head>
@@ -181,9 +284,9 @@
                 </div>
             </div>
             
-            <!-- New Chat Button - Compact -->
+            <!-- New Chat Button - Enhanced -->
             <div class="p-4">
-                <button id="newChatBtn" class="w-full gradient-bg text-white py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:opacity-90 transition-opacity text-sm">
+                <button id="newChatBtn" class="w-full gradient-bg text-white py-3 px-4 rounded-xl flex items-center justify-center space-x-2 hover:opacity-90 transition-all duration-200 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 enhanced-button">
                     <i class="fas fa-plus text-sm"></i>
                     <span>New Chat</span>
                 </button>
@@ -215,9 +318,9 @@
                 </div>
             </div>
             
-            <!-- Upload Document - Compact -->
+            <!-- Upload Document - Enhanced -->
             <div class="p-4 border-t border-indigo-700">
-                <label for="fileUpload" class="w-full bg-indigo-600 text-white py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-indigo-700 transition-colors cursor-pointer text-sm">
+                <label for="fileUpload" class="w-full bg-indigo-600 text-white py-3 px-4 rounded-xl flex items-center justify-center space-x-2 hover:bg-indigo-700 transition-all duration-200 cursor-pointer text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 enhanced-button">
                     <i class="fas fa-upload text-sm"></i>
                     <span>Upload PDF</span>
                 </label>
@@ -246,53 +349,39 @@
             
             <!-- Chat Messages - Compact -->
             <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                <!-- Welcome Message -->
-                <div class="message-bubble">
-                    <div class="flex items-start space-x-3">
-                        <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
-                            <i class="fas fa-brain text-white text-xs"></i>
+                <div class="flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
+                    <!-- Hero Section -->
+                    <div class="welcome-hero">
+                        <div class="w-20 h-20 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                            <i class="fas fa-brain text-white text-2xl"></i>
                         </div>
-                        <div class="flex-1">
-                            <div class="flex items-center space-x-2 mb-1">
-                                <span class="font-semibold text-gray-800 text-sm">AI Document Assistant</span>
-                                <span class="text-xs text-gray-500">Ready to help</span>
-                            </div>
-                            <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
-                                <p class="text-gray-700 text-sm mb-3">
-                                    Hello! I'm your AI document assistant. I can help you analyze, understand, and extract insights from your uploaded documents. What would you like to know?
-                                </p>
-                                <p class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                    AI can make mistakes. Please verify important information.
-                                </p>
-                            </div>
-                        </div>
+                        <h1 class="text-3xl font-bold text-gray-800 mb-2">Welcome!</h1>
+                        <p class="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                            Your intelligent companion for document analysis, insights extraction, and knowledge discovery.
+                        </p>
                     </div>
                 </div>
             </div>
             
-            <!-- Chat Input - Compact -->
+            <!-- Chat Input - Enhanced and Cleaner -->
             <div class="bg-white border-t border-gray-200 p-4">
-                <div class="flex items-end space-x-2">
-                    <button id="attachBtn" class="text-gray-500 hover:text-indigo-600 transition-colors p-2">
-                        <i class="fas fa-paperclip text-sm"></i>
-                    </button>
+                <div class="flex items-end space-x-3">
                     <div class="flex-1 relative">
                         <textarea 
                             id="messageInput" 
                             placeholder="Ask me anything about your documents..."
-                            class="w-full border border-gray-300 rounded-lg px-3 py-2 pr-16 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                            class="w-full border border-gray-300 rounded-xl px-4 py-3 pr-20 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-all duration-200 hover:border-gray-400 enhanced-input"
                             rows="1"
                             maxlength="1000"
                         ></textarea>
-                        <div id="charCount" class="absolute bottom-1 right-2 text-xs text-gray-400">
+                        <div id="charCount" class="absolute bottom-3 right-3 text-xs text-gray-400 bg-white px-1">
                             0/1000
                         </div>
                     </div>
-                    <button id="sendBtn" class="gradient-bg text-white p-2 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50">
+                    <button id="sendBtn" class="gradient-bg text-white p-3 rounded-xl hover:opacity-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 send-button-hover">
                         <i class="fas fa-paper-plane text-sm"></i>
                     </button>
                 </div>
-
             </div>
         </div>
     </div>
@@ -538,32 +627,34 @@
         
         function createDocumentElement(doc) {
             const div = document.createElement('div');
-            div.className = 'document-card bg-indigo-800/50 rounded-lg p-2 cursor-pointer hover:bg-indigo-800/70 transition-colors';
+            div.className = 'document-card bg-indigo-800/50 rounded-xl p-3 cursor-pointer hover:bg-indigo-800/70 transition-all duration-200 enhanced-item';
             div.innerHTML = `
-                <div class="flex items-center space-x-2">
-                    <i class="fas fa-file-pdf text-red-400 text-sm"></i>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-white font-medium truncate text-xs">${doc.name}</p>
-                        <p class="text-indigo-200 text-xs">${doc.pages} pages • ${doc.uploaded}</p>
+                <a href="/documents/${doc.name}" target="_blank" class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-file-pdf text-red-400 text-sm"></i>
                     </div>
-                </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white font-medium truncate text-sm">${doc.name}</p>
+                        <p class="text-indigo-200 text-xs mt-1">${doc.pages} pages • ${doc.uploaded}</p>
+                    </div>
+                </a>
             `;
-            
-            div.addEventListener('click', () => selectDocument(doc));
             return div;
         }
         
         function createChatElement(chat) {
             const div = document.createElement('div');
-            div.className = `chat-item bg-indigo-800/30 rounded-lg p-2 cursor-pointer group ${currentChatId === chat.id ? 'active' : ''}`;
+            div.className = `chat-item bg-indigo-800/30 rounded-xl p-3 cursor-pointer group ${currentChatId === chat.id ? 'active' : ''} enhanced-item`;
             div.innerHTML = `
-                <div class="flex items-center space-x-2">
-                    <i class="fas fa-comment text-indigo-300 text-sm"></i>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-white font-medium truncate text-xs">${chat.title}</p>
-                        <p class="text-indigo-200 text-xs">${chat.document} • ${chat.last_message}</p>
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-comment text-indigo-300 text-sm"></i>
                     </div>
-                    <button class="text-indigo-300 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity" onclick="deleteChatWrapper('${chat.id}', event)">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white font-medium truncate text-sm">${chat.title}</p>
+                        <p class="text-indigo-200 text-xs mt-1">${chat.document} • ${chat.last_message}</p>
+                    </div>
+                    <button class="text-indigo-300 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-indigo-700/50 p-1 rounded" onclick="deleteChatWrapper('${chat.id}', event)">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -645,24 +736,16 @@
         function renderWelcomeMessage() {
             const container = document.getElementById('chatMessages');
             container.innerHTML = `
-                <div class="message-bubble">
-                    <div class="flex items-start space-x-3">
-                        <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
-                            <i class="fas fa-brain text-white text-xs"></i>
+                <div class="flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
+                    <!-- Hero Section -->
+                    <div class="welcome-hero">
+                        <div class="w-20 h-20 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                            <i class="fas fa-brain text-white text-2xl"></i>
                         </div>
-                        <div class="flex-1">
-                            <div class="flex items-center space-x-2 mb-1">
-                                <span class="font-semibold text-gray-800 text-sm">Welcome to SRM AI Doc Assist!</span>
-                            </div>
-                            <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
-                                <p class="text-gray-700 text-sm mb-3">
-                                    I'm here to help you with your documents. Ask me anything, or start by uploading a new document.
-                                </p>
-                                <p class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                    To start, just type your question below or select a document.
-                                </p>
-                            </div>
-                        </div>
+                        <h1 class="text-3xl font-bold text-gray-800 mb-2">Welcome!</h1>
+                        <p class="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                            Your intelligent companion for document analysis, insights extraction, and knowledge discovery.
+                        </p>
                     </div>
                 </div>
             `;
@@ -681,29 +764,20 @@
         
         function addWelcomeMessage() {
             const container = document.getElementById('chatMessages');
-            const welcomeDiv = document.createElement('div');
-            welcomeDiv.className = 'message-bubble';
-            welcomeDiv.innerHTML = `
-                <div class="flex items-start space-x-3">
-                    <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
-                        <i class="fas fa-brain text-white text-xs"></i>
-                    </div>
-                    <div class="flex-1">
-                        <div class="flex items-center space-x-2 mb-1">
-                            <span class="font-semibold text-gray-800 text-sm">AI Document Assistant</span>
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
+                    <!-- Hero Section -->
+                    <div class="welcome-hero">
+                        <div class="w-20 h-20 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl">
+                            <i class="fas fa-brain text-white text-2xl"></i>
                         </div>
-                        <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
-                            <p class="text-gray-700 text-sm mb-3">
-                                I'm ready to help. What would you like to know about your documents?
-                            </p>
-                            <p class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                AI can make mistakes. Please verify important information.
-                            </p>
-                        </div>
+                        <h1 class="text-3xl font-bold text-gray-800 mb-2">Welcome!</h1>
+                        <p class="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                            Your intelligent companion for document analysis, insights extraction, and knowledge discovery.
+                        </p>
                     </div>
                 </div>
             `;
-            container.appendChild(welcomeDiv);
         }
         
         function addDocumentContextMessage(doc) {
@@ -712,21 +786,22 @@
             contextDiv.className = 'message-bubble';
             contextDiv.innerHTML = `
                 <div class="flex items-start space-x-3">
-                    <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
-                        <i class="fas fa-file-pdf text-white text-xs"></i>
+                    <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                        <i class="fas fa-file-pdf text-white text-sm"></i>
                     </div>
                     <div class="flex-1">
-                        <div class="flex items-center space-x-2 mb-1">
-                            <span class="font-semibold text-gray-800 text-sm">Document Context</span>
-                            <span class="text-xs text-gray-500">Ready to analyze</span>
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="font-semibold text-gray-800 text-base">Document Context</span>
+                            <span class="text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full font-medium">Ready to analyze</span>
                         </div>
-                        <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
-                            <p class="text-gray-700 text-sm mb-3">
+                        <div class="assistant-message p-4 max-w-2xl">
+                            <p class="text-gray-700 text-sm mb-3 leading-relaxed">
                                 I'm ready to help you with <strong>${doc.name}</strong>. This document has ${doc.pages} pages and was uploaded ${doc.uploaded}. What would you like to know about it?
                             </p>
-                            <p class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                AI can make mistakes. Please verify important information.
-                            </p>
+                            <div class="flex items-center space-x-2 text-xs text-gray-500 border-t border-gray-100 pt-3">
+                                <i class="fas fa-info-circle text-indigo-400"></i>
+                                <span>AI can make mistakes. Please verify important information.</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -849,8 +924,6 @@
             const bgColor = isUser ? 'gradient-bg text-white' : 'bg-white';
             const textColor = isUser ? 'text-white' : 'text-gray-700';
             
-
-            
             let sourcesHtml = '';
             if (message.sources && message.sources.length > 0) {
                 sourcesHtml = `
@@ -869,24 +942,24 @@
             }
             
             messageDiv.innerHTML = `
-                <div class="flex ${alignment} mb-4">
-                    <div class="flex items-start space-x-2 ${isUser ? 'flex-row-reverse space-x-reverse' : ''} max-w-2xl">
+                <div class="flex ${alignment} mb-6">
+                    <div class="flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''} max-w-3xl">
                         ${!isUser ? `
-                            <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
-                                <i class="fas fa-brain text-white text-xs"></i>
+                            <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                                <i class="fas fa-brain text-white text-sm"></i>
                             </div>
                         ` : `
-                            <div class="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                <i class="fas fa-user text-white text-xs"></i>
+                            <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                                <i class="fas fa-user text-white text-sm"></i>
                             </div>
                         `}
                         <div class="flex-1 ${isUser ? 'text-right' : ''}">
-                            <div class="flex items-center space-x-2 mb-1 ${isUser ? 'justify-end' : ''}">
-                                <span class="font-medium ${isUser ? 'text-gray-800' : 'text-gray-800'} text-sm">${isUser ? 'You' : 'AI Document Assistant'}</span>
-                                <span class="text-xs text-gray-500">${message.timestamp}</span>
+                            <div class="flex items-center space-x-2 mb-2 ${isUser ? 'justify-end' : ''}">
+                                <span class="font-semibold ${isUser ? 'text-gray-700' : 'text-gray-700'} text-sm">${isUser ? 'You' : 'AI Document Assistant'}</span>
+                                <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">${message.timestamp}</span>
                             </div>
-                            <div class="${bgColor} rounded-lg p-3 shadow-sm ${!isUser ? 'border border-gray-200' : ''} ${isUser ? 'ml-auto' : ''}">
-                                <div class="${textColor} whitespace-pre-wrap text-sm">${message.content}</div>
+                            <div class="${isUser ? 'user-message' : 'assistant-message'} p-4 ${isUser ? 'ml-auto' : ''} max-w-2xl">
+                                <div class="whitespace-pre-wrap text-sm leading-relaxed">${message.content}</div>
                                 ${sourcesHtml}
                             </div>
                         </div>
@@ -1179,6 +1252,47 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+        
+        // Helper function to focus the message input
+        function focusMessageInput() {
+            const messageInput = document.getElementById('messageInput');
+            if (messageInput) {
+                messageInput.focus();
+                messageInput.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+        
+        // Function to populate recent documents preview
+        function populateRecentDocumentsPreview() {
+            const container = document.getElementById('recentDocumentsPreview');
+            const noDocumentsMessage = document.getElementById('noDocumentsMessage');
+            
+            if (!container) return;
+            
+            if (documents.length === 0) {
+                if (noDocumentsMessage) {
+                    noDocumentsMessage.classList.remove('hidden');
+                }
+                return;
+            }
+            
+            // Show only the first 6 documents
+            const recentDocs = documents.slice(0, 6);
+            
+            container.innerHTML = recentDocs.map(doc => `
+                <div class="bg-white rounded-xl p-4 shadow-md border border-gray-100 document-preview-card cursor-pointer" onclick="selectDocument(${JSON.stringify(doc).replace(/"/g, '&quot;')})">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-file-pdf text-red-500 text-lg"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-semibold text-gray-800 text-sm truncate">${doc.name}</h4>
+                            <p class="text-gray-500 text-xs mt-1">${doc.pages} pages • ${doc.uploaded}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
         }
         
         function handleIncomingMessage(data) {
