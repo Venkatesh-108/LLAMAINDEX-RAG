@@ -13,6 +13,17 @@
   "rerank_threshold": 0.3,
   "max_context_length": 4096,
 
+  "advanced_retrieval": {
+    "retrieval_top_k": 15,
+    "retrieval_similarity_threshold": 0.4,
+    "retrieval_rerank_top_k": 8,
+    "retrieval_rerank_similarity_threshold": 0.6,
+    "use_hybrid_retrieval": true,
+    "use_multi_query": true,
+    "use_reranking": true,
+    "hybrid_weights": [0.7, 0.3]
+  },
+
   "_accuracy_comments": {
     "chunk_size": "1024 - Optimal for technical documentation with good context",
     "chunk_overlap": "200 - Increased from 128 for better continuity",
@@ -20,6 +31,17 @@
     "temperature": "0.1 - Low temperature for accurate, focused responses",
     "rerank_threshold": "0.3 - Filter out results below 30% similarity",
     "max_context_length": "4096 - Maximum context window for comprehensive answers"
+  },
+
+  "retrieval_enhancement_comments": {
+    "retrieval_top_k": "15 - Initial retrieval of more documents for better coverage",
+    "retrieval_similarity_threshold": "0.4 - Lower threshold for initial retrieval",
+    "retrieval_rerank_top_k": "8 - Top documents to rerank for final selection",
+    "retrieval_rerank_similarity_threshold": "0.6 - Higher threshold for final selection",
+    "use_hybrid_retrieval": "Combines dense vector + sparse BM25 for better recall",
+    "use_multi_query": "Generates multiple query variations for diverse results",
+    "use_reranking": "Uses LLM to rerank and select best documents",
+    "hybrid_weights": "[0.7, 0.3] - 70% dense vector, 30% sparse keyword"
   },
 
   "model_configurations": {
@@ -30,7 +52,17 @@
       "chunk_size": 1536,
       "chunk_overlap": 300,
       "rerank_threshold": 0.4,
-      "temperature": 0.05
+      "temperature": 0.05,
+      "advanced_retrieval": {
+        "retrieval_top_k": 20,
+        "retrieval_similarity_threshold": 0.3,
+        "retrieval_rerank_top_k": 10,
+        "retrieval_rerank_similarity_threshold": 0.7,
+        "use_hybrid_retrieval": true,
+        "use_multi_query": true,
+        "use_reranking": true,
+        "hybrid_weights": [0.6, 0.4]
+      }
     },
     "balanced_accuracy_speed": {
       "llm_model": "llama3.1:8b",
@@ -39,7 +71,17 @@
       "chunk_size": 1024,
       "chunk_overlap": 200,
       "rerank_threshold": 0.3,
-      "temperature": 0.1
+      "temperature": 0.1,
+      "advanced_retrieval": {
+        "retrieval_top_k": 15,
+        "retrieval_similarity_threshold": 0.4,
+        "retrieval_rerank_top_k": 8,
+        "retrieval_rerank_similarity_threshold": 0.6,
+        "use_hybrid_retrieval": true,
+        "use_multi_query": true,
+        "use_reranking": true,
+        "hybrid_weights": [0.7, 0.3]
+      }
     },
     "fast_response": {
       "llm_model": "llama3.1:8b",
@@ -48,15 +90,26 @@
       "chunk_size": 512,
       "chunk_overlap": 100,
       "rerank_threshold": 0.2,
-      "temperature": 0.2
+      "temperature": 0.2,
+      "advanced_retrieval": {
+        "retrieval_top_k": 10,
+        "retrieval_similarity_threshold": 0.5,
+        "retrieval_rerank_top_k": 5,
+        "retrieval_rerank_similarity_threshold": 0.5,
+        "use_hybrid_retrieval": false,
+        "use_multi_query": false,
+        "use_reranking": false,
+        "hybrid_weights": [1.0, 0.0]
+      }
     }
   },
 
   "accuracy_techniques": {
     "query_enhancement": "Automatically adds Dell SRM context keywords",
-    "similarity_reranking": "Filters results below similarity threshold",
-    "tree_summarize": "Better response synthesis for technical docs",
-    "async_processing": "Faster query processing",
-    "instruction_tuned_embeddings": "Context-aware embedding generation"
+    "hybrid_retrieval": "Combines semantic and keyword-based search",
+    "multi_query": "Generates multiple query variations for better coverage",
+    "llm_reranking": "Uses LLM to intelligently rank retrieved documents",
+    "semantic_chunking": "Preserves meaning in document chunks",
+    "context_preservation": "Maintains document structure and relationships"
   }
 }

@@ -1,0 +1,28 @@
+{
+  "pdf_directory": "./dell_srm_pdfs",
+  "vector_db_path": "./vector_db",
+  "ollama_host": "http://localhost:11434",
+  "llm_model": "llama3.1:8b",
+  "embedding_model": "nomic-embed-text",
+  "chunk_size": 1024,
+  "chunk_overlap": 200,
+  "similarity_top_k": 12,
+  "temperature": 0.1,
+  "max_retries": 3,
+  "timeout": 120,
+  "rerank_threshold": 0.3,
+  "max_context_length": 4096,
+
+  "_enhanced_features": {
+    "query_enhancement": "Automatically adds Dell SRM context and synonyms",
+    "advanced_retriever": "Uses optimized retrieval parameters",
+    "similarity_filtering": "Filters low-quality results",
+    "tree_summarize": "Better response synthesis for technical docs"
+  },
+
+  "_performance_profiles": {
+    "balanced": "Current configuration - good balance of speed and quality",
+    "high_quality": "Increase similarity_top_k to 15, rerank_threshold to 0.4",
+    "fast_response": "Decrease similarity_top_k to 8, rerank_threshold to 0.2"
+  }
+}

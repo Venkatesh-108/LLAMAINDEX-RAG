@@ -37,6 +37,45 @@ try:
     from llama_index.embeddings.ollama import OllamaEmbedding
     from llama_index.vector_stores.chroma import ChromaVectorStore
     from llama_index.readers.file import PDFReader
+    
+    # Advanced retrieval enhancements (optional)
+    try:
+        from llama_index.core.retrievers import (
+            VectorIndexRetriever
+        )
+        from llama_index.core.postprocessor import (
+            SimilarityPostprocessor,
+            LLMRerank
+        )
+        from llama_index.core.query_engine import RetrieverQueryEngine
+        
+        # Check for additional advanced features
+        try:
+            from llama_index.core.retrievers import HybridRetriever
+            HYBRID_AVAILABLE = True
+        except ImportError:
+            HYBRID_AVAILABLE = False
+            
+        try:
+            from llama_index.core.retrievers import MultiQueryRetriever
+            MULTI_QUERY_AVAILABLE = True
+        except ImportError:
+            MULTI_QUERY_AVAILABLE = False
+            
+        try:
+            from llama_index.core.retrievers import BM25Retriever
+            BM25_AVAILABLE = True
+        except ImportError:
+            BM25_AVAILABLE = False
+        
+        ADVANCED_RETRIEVAL_AVAILABLE = True
+        
+    except ImportError as e:
+        ADVANCED_RETRIEVAL_AVAILABLE = False
+        HYBRID_AVAILABLE = False
+        MULTI_QUERY_AVAILABLE = False
+        BM25_AVAILABLE = False
+        
 except ImportError as e:
     print(f"❌ Missing LlamaIndex dependencies: {e}")
     print("Run: pip install -r requirements.txt")
@@ -54,6 +93,23 @@ except ImportError as e:
 
 # Initialize Rich console
 console = Console()
+
+# Now we can use console.print for advanced retrieval status
+if ADVANCED_RETRIEVAL_AVAILABLE:
+    available_features = []
+    if HYBRID_AVAILABLE:
+        available_features.append("Hybrid Retrieval")
+    if MULTI_QUERY_AVAILABLE:
+        available_features.append("Multi-Query")
+    if BM25_AVAILABLE:
+        available_features.append("BM25 Sparse Retrieval")
+    
+    if available_features:
+        console.print(f"✅ Advanced retrieval features available: {', '.join(available_features)}")
+    else:
+        console.print("✅ Basic advanced features available (SimilarityPostprocessor, LLMRerank)")
+else:
+    console.print("⚠️ Advanced retrieval features not available - using basic retrieval")
 
 @dataclass
 class RAGConfig:
@@ -374,6 +430,72 @@ class DellSRMDocumentProcessor:
         else:
             return 'general_guide'
 
+class EnhancedRetriever:
+    """Enhanced retrieval techniques compatible with current LlamaIndex version"""
+    
+    def __init__(self, config: RAGConfig):
+        self.config = config
+        self.llm = None
+    
+    def setup_llm(self, llm):
+        """Setup LLM for enhanced features"""
+        self.llm = llm
+    
+    def enhance_query(self, query: str) -> str:
+        """Enhance query with Dell SRM context and synonyms"""
+        srm_synonyms = {
+            "storage": ["storage array", "storage system", "EMC", "Dell EMC", "storage infrastructure"],
+            "monitoring": ["monitor", "surveillance", "tracking", "alerting", "observability"],
+            "solutionpack": ["SP", "Solution Pack", "monitoring pack", "SolutionPack"],
+            "fabric": ["SAN fabric", "storage fabric", "network fabric", "Fibre Channel fabric"],
+            "WWN": ["World Wide Name", "port identifier", "FC port ID"],
+            "host": ["server", "initiator", "host system", "compute node"],
+            "array": ["storage array", "disk array", "storage system", "EMC array"],
+            "zone": ["zoning", "SAN zone", "fabric zone", "storage zone"],
+            "alert": ["notification", "alarm", "warning", "event"],
+            "report": ["reporting", "analytics", "dashboard", "metrics"]
+        }
+        
+        enhanced_query = query
+        query_lower = query.lower()
+        
+        for term, synonyms in srm_synonyms.items():
+            if term.lower() in query_lower:
+                # Add synonyms that aren't already in the query
+                for synonym in synonyms:
+                    if synonym.lower() not in query_lower:
+                        enhanced_query += f" {synonym}"
+        
+        # Add Dell SRM context if not present
+        if "dell srm" not in query_lower and "srm" not in query_lower:
+            enhanced_query += " Dell SRM Storage Resource Management"
+        
+        return enhanced_query.strip()
+    
+    def create_enhanced_retriever(self, index):
+        """Create enhanced retriever with better parameters"""
+        try:
+            # Use advanced retriever if available
+            if ADVANCED_RETRIEVAL_AVAILABLE:
+                retriever = VectorIndexRetriever(
+                    index=index,
+                    similarity_top_k=self.config.similarity_top_k * 2  # Get more candidates
+                )
+            else:
+                # Fallback to basic retriever
+                retriever = index.as_retriever(
+                    similarity_top_k=self.config.similarity_top_k * 2
+                )
+            
+            return retriever
+            
+        except Exception as e:
+            console.print(f"⚠️ Enhanced retriever failed, using basic: {e}")
+            return index.as_retriever(
+                similarity_top_k=self.config.similarity_top_k
+            )
+
+
 class RAGVectorStore:
     """Manages vector storage and retrieval"""
     
@@ -381,6 +503,7 @@ class RAGVectorStore:
         self.config = config
         self.vector_store = None
         self.index = None
+        self.enhanced_retriever = None
         
         # Setup storage directory
         self.storage_dir = Path(config.vector_db_path)
@@ -398,9 +521,15 @@ class RAGVectorStore:
         index_path = self.storage_dir / "index"
         
         if index_path.exists() and not documents:
-            return self._load_existing_index()
+            success = self._load_existing_index()
         else:
-            return self._create_new_index(documents)
+            success = self._create_new_index(documents)
+        
+        # Initialize enhanced retriever if index is available
+        if success and self.index:
+            self.enhanced_retriever = EnhancedRetriever(self.config)
+        
+        return success
     
     def _load_existing_index(self) -> bool:
         """Load existing index"""
@@ -476,30 +605,97 @@ class RAGVectorStore:
         if not self.index:
             return None
 
-        # Enhanced retriever with more candidates for reranking
-        base_retriever = self.index.as_retriever(
-            similarity_top_k=self.config.similarity_top_k * 2  # Get more candidates
-        )
+        try:
+            # Use enhanced retriever if available
+            if self.enhanced_retriever:
+                base_retriever = self.enhanced_retriever.create_enhanced_retriever(self.index)
+            else:
+                base_retriever = self.index.as_retriever(
+                    similarity_top_k=self.config.similarity_top_k * 2
+                )
 
-        # Import post-processors for accuracy improvement
-        from llama_index.core.postprocessor import SimilarityPostprocessor
-        from llama_index.core.query_engine import RetrieverQueryEngine
+            # Use available advanced features
+            if ADVANCED_RETRIEVAL_AVAILABLE:
+                try:
+                    # Post-processor to filter low-similarity results
+                    similarity_filter = SimilarityPostprocessor(
+                        similarity_cutoff=self.config.rerank_threshold
+                    )
 
-        # Post-processor to filter low-similarity results
-        similarity_filter = SimilarityPostprocessor(
-            similarity_cutoff=self.config.rerank_threshold  # Configurable threshold
-        )
+                    # Create enhanced query engine with available features
+                    query_engine = RetrieverQueryEngine.from_args(
+                        retriever=base_retriever,
+                        node_postprocessors=[similarity_filter],
+                        response_mode="tree_summarize",  # Better for technical documentation
+                        use_async=True,
+                        verbose=True  # Enable verbose mode for debugging
+                    )
 
-        # Create enhanced query engine
-        query_engine = RetrieverQueryEngine.from_args(
-            retriever=base_retriever,
-            node_postprocessors=[similarity_filter],
-            response_mode="tree_summarize",  # Better for technical documentation
-            use_async=True,
-            verbose=True  # Enable verbose mode for debugging
-        )
+                    # Show enhanced features status
+                    if self.enhanced_retriever:
+                        console.print("✅ Enhanced retrieval features enabled:")
+                        console.print(f"   - Query enhancement: ✅")
+                        console.print(f"   - Advanced retriever: ✅")
+                        console.print(f"   - Similarity filtering: ✅")
+                        
+                        # Show available advanced features
+                        if HYBRID_AVAILABLE:
+                            console.print(f"   - Hybrid retrieval: ✅")
+                        if MULTI_QUERY_AVAILABLE:
+                            console.print(f"   - Multi-query: ✅")
+                        if BM25_AVAILABLE:
+                            console.print(f"   - BM25 sparse retrieval: ✅")
+                    else:
+                        console.print("⚠️ Using basic retrieval (enhanced features not available)")
 
-        return query_engine
+                    return query_engine
+
+                except Exception as e:
+                    console.print(f"⚠️ Advanced features failed, using basic: {e}")
+                    # Fallback to basic query engine
+                    if hasattr(base_retriever, 'as_query_engine'):
+                        return base_retriever.as_query_engine(
+                            response_mode="tree_summarize",
+                            use_async=True,
+                            verbose=True
+                        )
+                    else:
+                        # Use the index directly
+                        return self.index.as_query_engine(
+                            response_mode="tree_summarize",
+                            use_async=True,
+                            verbose=True
+                        )
+            else:
+                # Use basic query engine
+                console.print("⚠️ Advanced features not available, using basic query engine")
+                if hasattr(base_retriever, 'as_query_engine'):
+                    return base_retriever.as_query_engine(
+                        response_mode="tree_summarize",
+                        use_async=True,
+                        verbose=True
+                    )
+                else:
+                    # Use the index directly
+                    return self.index.as_query_engine(
+                        response_mode="tree_summarize",
+                        use_async=True,
+                        verbose=True
+                    )
+
+        except Exception as e:
+            console.print(f"⚠️ Enhanced query engine failed, falling back to basic: {e}")
+            # Fallback to basic retriever
+            base_retriever = self.index.as_retriever(
+                similarity_top_k=self.config.similarity_top_k
+            )
+            
+            # Use the index directly for query engine
+            return self.index.as_query_engine(
+                response_mode="tree_summarize",
+                use_async=True,
+                verbose=True
+            )
 
 class DellSRMRAG:
     """Main RAG system for Dell SRM documents"""
@@ -573,6 +769,10 @@ class DellSRMRAG:
         if not self._setup_vector_index():
             return False
         
+        # Setup enhanced retriever with LLM
+        if self.vector_store.enhanced_retriever:
+            self.vector_store.enhanced_retriever.setup_llm(Settings.llm)
+        
         # Create query engine
         self.query_engine = self.vector_store.get_query_engine()
         if not self.query_engine:
@@ -633,8 +833,12 @@ class DellSRMRAG:
             return {"error": "RAG system not initialized"}
         
         try:
-            # Enhance query for better retrieval accuracy
+            # Enhanced query processing
             enhanced_query = self._enhance_query(question)
+            
+            # Use enhanced retriever for additional query enhancement if available
+            if self.vector_store.enhanced_retriever:
+                enhanced_query = self.vector_store.enhanced_retriever.enhance_query(enhanced_query)
 
             # Create enhanced prompt for SRM context
             enhanced_prompt = self._create_enhanced_prompt(enhanced_query)
@@ -841,6 +1045,55 @@ Provide a comprehensive, accurate answer based on the Dell SRM documentation:
         with open(path, 'w') as f:
             json.dump(config_dict, f, indent=2)
         console.print(f"✅ Configuration saved to {path}")
+    
+    def benchmark_retrieval(self, test_queries: List[str] = None):
+        """Benchmark retrieval performance with test queries"""
+        if not test_queries:
+            test_queries = [
+                "What are the system requirements for Dell SRM?",
+                "How do I configure SolutionPacks?",
+                "What is the upgrade procedure?",
+                "How do I troubleshoot host discovery?",
+                "What monitoring capabilities are available?"
+            ]
+        
+        console.print("\n🧪 Retrieval System Benchmark")
+        console.print("=" * 40)
+        
+        results = []
+        total_time = 0
+        
+        for i, query in enumerate(test_queries, 1):
+            console.print(f"\nTest {i}/{len(test_queries)}: {query}")
+            
+            start_time = time.time()
+            result = self.query(query)
+            query_time = time.time() - start_time
+            total_time += query_time
+            
+            # Extract retrieval stats
+            retrieval_stats = {
+                "query": query,
+                "time": query_time,
+                "sources_found": len(result.get("sources", [])),
+                "data_available": result.get("data_available", False),
+                "error": "error" in result
+            }
+            
+            results.append(retrieval_stats)
+            
+            # Display quick result
+            status = "✅" if retrieval_stats["data_available"] else "❌"
+            console.print(f"   {status} {query_time:.2f}s - {retrieval_stats['sources_found']} sources")
+        
+        # Summary
+        console.print(f"\n📊 Benchmark Summary:")
+        console.print(f"   Total queries: {len(test_queries)}")
+        console.print(f"   Average time: {total_time/len(test_queries):.2f}s")
+        console.print(f"   Success rate: {sum(1 for r in results if r['data_available'])/len(results)*100:.1f}%")
+        console.print(f"   Total sources found: {sum(r['sources_found'] for r in results)}")
+        
+        return results
 
 def main():
     """Main CLI interface"""
@@ -880,6 +1133,12 @@ def main():
         help="LLM model to use"
     )
     
+    parser.add_argument(
+        "--benchmark", "-b",
+        action="store_true",
+        help="Run retrieval system benchmark"
+    )
+    
     args = parser.parse_args()
     
     # Welcome message
@@ -908,6 +1167,11 @@ def main():
         if not rag.initialize():
             console.print("❌ Failed to initialize RAG system")
             return 1
+        
+        # Benchmark mode
+        if args.benchmark:
+            rag.benchmark_retrieval()
+            return 0
         
         # Single query mode
         if args.query:
