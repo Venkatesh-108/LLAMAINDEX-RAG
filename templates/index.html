@@ -1243,21 +1243,20 @@
             if (existingIndicator) {
                 existingIndicator.remove();
             }
-
             const typingDiv = document.createElement('div');
             typingDiv.id = 'typingIndicator';
             typingDiv.className = 'message-bubble';
             typingDiv.innerHTML = `
                 <div class="flex items-start space-x-3">
-                    <div class="w-6 h-6 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
-                        <i class="fas fa-brain text-white text-xs"></i>
+                    <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                        <i class="fas fa-brain text-white text-sm"></i>
                     </div>
-                    <div class="flex-1">
-                        <div class="flex items-center space-x-2 mb-1">
-                            <span class="font-semibold text-gray-800 text-sm">AI Document Assistant</span>
-                            <span class="text-xs text-gray-500">Typing...</span>
+                    <div>
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="font-semibold text-gray-700 text-sm">AI Assistant</span>
+                            <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Typing...</span>
                         </div>
-                        <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+                        <div class="assistant-message p-3 inline-block">
                             <div class="typing-indicator"></div>
                         </div>
                     </div>
