@@ -57,18 +57,22 @@ console = Console()
 
 @dataclass
 class RAGConfig:
-    """Configuration for the RAG system"""
+    """Configuration for the RAG system - Optimized for accuracy"""
     pdf_directory: str = "./dell_srm_pdfs"
     vector_db_path: str = "./vector_db"
     ollama_host: str = "http://localhost:11434"
     llm_model: str = "llama3.1:8b"
     embedding_model: str = "nomic-embed-text"
-    chunk_size: int = 1024
-    chunk_overlap: int = 128
-    similarity_top_k: int = 8
-    temperature: float = 0.1
+    # Enhanced chunking for better context preservation
+    chunk_size: int = 1024  # Optimal size for technical documentation
+    chunk_overlap: int = 200  # Increased overlap for better continuity
+    similarity_top_k: int = 12  # More candidates for better selection
+    temperature: float = 0.1  # Low temperature for accurate responses
     max_retries: int = 3
     timeout: int = 120
+    # New accuracy parameters
+    rerank_threshold: float = 0.3  # Similarity threshold for reranking
+    max_context_length: int = 4096  # Maximum context window
 
 class OllamaManager:
     """Manages Ollama model operations"""
@@ -468,15 +472,34 @@ class RAGVectorStore:
             return False
     
     def get_query_engine(self):
-        """Get query engine for the index"""
+        """Get enhanced query engine for the index"""
         if not self.index:
             return None
-        
-        return self.index.as_query_engine(
-            similarity_top_k=self.config.similarity_top_k,
-            response_mode="compact",
-            streaming=False
+
+        # Enhanced retriever with more candidates for reranking
+        base_retriever = self.index.as_retriever(
+            similarity_top_k=self.config.similarity_top_k * 2  # Get more candidates
         )
+
+        # Import post-processors for accuracy improvement
+        from llama_index.core.postprocessor import SimilarityPostprocessor
+        from llama_index.core.query_engine import RetrieverQueryEngine
+
+        # Post-processor to filter low-similarity results
+        similarity_filter = SimilarityPostprocessor(
+            similarity_cutoff=self.config.rerank_threshold  # Configurable threshold
+        )
+
+        # Create enhanced query engine
+        query_engine = RetrieverQueryEngine.from_args(
+            retriever=base_retriever,
+            node_postprocessors=[similarity_filter],
+            response_mode="tree_summarize",  # Better for technical documentation
+            use_async=True,
+            verbose=True  # Enable verbose mode for debugging
+        )
+
+        return query_engine
 
 class DellSRMRAG:
     """Main RAG system for Dell SRM documents"""
@@ -490,16 +513,27 @@ class DellSRMRAG:
         self.setup_logging()
         
         # Setup LlamaIndex global settings
+        # Enhanced LLM settings for better accuracy
         Settings.llm = Ollama(
             model=self.config.llm_model,
             base_url=self.config.ollama_host,
-            temperature=self.config.temperature,
-            request_timeout=self.config.timeout
+            temperature=0.1,  # Lower temperature for more accurate responses
+            request_timeout=self.config.timeout,
+            context_window=4096,  # Increase context window if model supports it
+            additional_kwargs={
+                "top_p": 0.1,  # More focused responses
+                "top_k": 40,   # Consider top 40 tokens
+                "num_predict": 512  # Reasonable response length
+            }
         )
-        
+
+        # Enhanced embedding settings
         Settings.embed_model = OllamaEmbedding(
             model_name=self.config.embedding_model,
-            base_url=self.config.ollama_host
+            base_url=self.config.ollama_host,
+            embed_batch_size=10,  # Process in smaller batches for accuracy
+            query_instruction="Represent the question for retrieving relevant technical documentation about Dell SRM systems:",
+            text_instruction="Represent the technical documentation chunk for retrieval:"
         )
     
     def _load_config(self, config_path: Optional[str]) -> RAGConfig:
@@ -599,40 +633,91 @@ class DellSRMRAG:
             return {"error": "RAG system not initialized"}
         
         try:
-            # Enhanced prompt for SRM context
-            enhanced_prompt = self._create_enhanced_prompt(question)
-            
-            # Execute query
+            # Enhance query for better retrieval accuracy
+            enhanced_query = self._enhance_query(question)
+
+            # Create enhanced prompt for SRM context
+            enhanced_prompt = self._create_enhanced_prompt(enhanced_query)
+
+            # Execute query with enhanced retrieval
             start_time = time.time()
             response = self.query_engine.query(enhanced_prompt)
             query_time = time.time() - start_time
             
-            # Process response
+            # Check if we have sufficient source data
+            has_sufficient_data = False
+            relevant_sources = []
+
+            if hasattr(response, 'source_nodes') and response.source_nodes:
+                # Filter sources that meet minimum similarity threshold
+                min_similarity = 0.3  # Minimum similarity threshold
+                for node in response.source_nodes:
+                    similarity_score = getattr(node, 'score', 0.0)
+                    if similarity_score >= min_similarity:
+                        relevant_sources.append(node)
+
+                # Only consider response valid if we have at least 2 relevant sources
+                # or 1 source with high confidence (>0.6)
+                if len(relevant_sources) >= 2 or (len(relevant_sources) == 1 and getattr(relevant_sources[0], 'score', 0.0) > 0.6):
+                    has_sufficient_data = True
+
+            # If no sufficient data found, return "no data available" message
+            if not has_sufficient_data:
+                return {
+                    "answer": "I apologize, but I don't have sufficient information about this topic in the Dell SRM documentation. The available documents don't contain relevant data for your question.",
+                    "query_time": round(query_time, 2),
+                    "sources": [],
+                    "data_available": False
+                }
+
+            # Process response only if we have sufficient data
             result = {
                 "answer": str(response),
                 "query_time": round(query_time, 2),
-                "sources": []
+                "sources": [],
+                "data_available": True
             }
-            
-            # Extract source information
-            if hasattr(response, 'source_nodes') and response.source_nodes:
-                for i, node in enumerate(response.source_nodes[:5]):  # Top 5 sources
-                    source_info = {
-                        "source_id": i + 1,
-                        "filename": node.metadata.get('filename', 'Unknown'),
-                        "content_type": node.metadata.get('content_type', 'text'),
-                        "document_type": node.metadata.get('document_type', 'general'),
-                        "similarity_score": getattr(node, 'score', 0.0),
-                        "excerpt": node.text[:200] + "..." if len(node.text) > 200 else node.text
-                    }
-                    result["sources"].append(source_info)
-            
+
+            # Extract source information for relevant sources only
+            for i, node in enumerate(relevant_sources[:5]):  # Top 5 relevant sources
+                source_info = {
+                    "source_id": i + 1,
+                    "filename": node.metadata.get('filename', 'Unknown'),
+                    "content_type": node.metadata.get('content_type', 'text'),
+                    "document_type": node.metadata.get('document_type', 'general'),
+                    "similarity_score": getattr(node, 'score', 0.0),
+                    "excerpt": node.text[:200] + "..." if len(node.text) > 200 else node.text
+                }
+                result["sources"].append(source_info)
+
             return result
             
         except Exception as e:
             self.logger.error(f"Query failed: {e}")
             return {"error": f"Query failed: {str(e)}"}
     
+    def _enhance_query(self, question: str) -> str:
+        """Enhance query for better retrieval accuracy"""
+        # Add Dell SRM specific context and keywords
+        srm_keywords = [
+            "Dell SRM", "Storage Resource Management", "SolutionPack",
+            "host discovery", "fabric", "WWN", "storage monitoring",
+            "alert", "configuration", "troubleshooting"
+        ]
+
+        enhanced_query = question
+
+        # Add relevant keywords if they're not already present
+        for keyword in srm_keywords:
+            if keyword.lower() in question.lower():
+                continue
+            # Add context for technical queries
+            if any(tech_term in question.lower() for tech_term in
+                   ["install", "setup", "configure", "troubleshoot", "monitor"]):
+                enhanced_query += f" {keyword}"
+
+        return enhanced_query.strip()
+
     def _create_enhanced_prompt(self, question: str) -> str:
         """Create enhanced prompt for Dell SRM context"""
         prompt_template = """
@@ -698,31 +783,42 @@ Provide a comprehensive, accurate answer based on the Dell SRM documentation:
     
     def _display_query_result(self, result: Dict):
         """Display query results in a formatted way"""
-        
-        # Display answer
-        console.print("\n📋 Answer:")
-        answer_panel = Panel(
-            result["answer"],
-            title="Dell SRM Assistant Response",
-            border_style="green"
-        )
+
+        # Check if data is available
+        data_available = result.get("data_available", True)
+
+        # Display answer with appropriate styling
+        if data_available:
+            console.print("\n📋 Answer:")
+            answer_panel = Panel(
+                result["answer"],
+                title="Dell SRM Assistant Response",
+                border_style="green"
+            )
+        else:
+            console.print("\n⚠️  Response:")
+            answer_panel = Panel(
+                result["answer"],
+                title="No Data Available",
+                border_style="yellow"
+            )
         console.print(answer_panel)
         
-        # Display sources if available
-        if result.get("sources"):
+        # Display sources if available and data is present
+        if result.get("sources") and data_available:
             console.print(f"\n📚 Sources ({len(result['sources'])} found):")
-            
+
             sources_table = Table(show_header=True, header_style="bold blue")
             sources_table.add_column("#", style="dim", width=3)
             sources_table.add_column("Document", style="cyan")
             sources_table.add_column("Type", style="magenta")
             sources_table.add_column("Relevance", style="green")
             sources_table.add_column("Preview", style="dim")
-            
+
             for source in result["sources"]:
                 relevance = f"{source['similarity_score']:.1%}" if source['similarity_score'] else "N/A"
                 preview = source["excerpt"][:80] + "..." if len(source["excerpt"]) > 80 else source["excerpt"]
-                
+
                 sources_table.add_row(
                     str(source["source_id"]),
                     source["filename"],
@@ -730,8 +826,10 @@ Provide a comprehensive, accurate answer based on the Dell SRM documentation:
                     relevance,
                     preview
                 )
-            
+
             console.print(sources_table)
+        elif not data_available:
+            console.print(f"\n📚 Sources: No relevant sources found in the documentation")
         
         # Display query time
         if result.get("query_time"):

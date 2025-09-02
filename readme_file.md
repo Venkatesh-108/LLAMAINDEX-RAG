@@ -79,7 +79,8 @@ mkdir dell_srm_pdfs vector_db logs config
 cp /path/to/your/srm-pdfs/* ./dell_srm_pdfs/
 
 # 4. Run the system
-python dell_srm_rag.py
+python rag.py
+venv\Scripts\activate && python app.py
 ```
 
 ## 💡 Usage Examples
