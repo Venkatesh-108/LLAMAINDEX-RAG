@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRM AI Doc Assist - Intelligent Document Chat</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Socket.IO for real-time chat -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <style>
+        /* Custom CSS for enhanced design */
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .sidebar-gradient {
+            background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+        }
+        
+        .chat-gradient {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+        
+        .message-bubble {
+            animation: fadeInUp 0.3s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .typing-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #cbd5e1;
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .document-card {
+            transition: all 0.2s ease;
+        }
+        
+        .document-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chat-item {
+            transition: all 0.2s ease;
+        }
+        
+        .chat-item:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="flex h-screen">
+        <!-- Left Sidebar -->
+        <div class="w-80 sidebar-gradient text-white flex flex-col">
+            <!-- Header -->
+            <div class="p-6 border-b border-indigo-700">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 gradient-bg rounded-full flex items-center justify-center">
+                        <i class="fas fa-brain text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold">SRM AI Doc Assist</h1>
+                        <p class="text-indigo-200 text-sm">Intelligent Document Chat</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- New Chat Button -->
+            <div class="p-6">
+                <button id="newChatBtn" class="w-full gradient-bg text-white py-3 px-4 rounded-lg flex items-center justify-center space-x-2 hover:opacity-90 transition-opacity">
+                    <i class="fas fa-comment-dots"></i>
+                    <span>New Chat</span>
+                </button>
+            </div>
+            
+            <!-- Recent Chats -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar">
+                <div class="px-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold text-indigo-200">Recent Chats</h3>
+                        <i class="fas fa-chevron-down text-indigo-300 cursor-pointer" id="chatsToggle"></i>
+                    </div>
+                    <div id="recentChats" class="space-y-2">
+                        <!-- Chat items will be populated here -->
+                    </div>
+                </div>
+                
+                <!-- Documents Section -->
+                <div class="px-6 mt-8">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold text-indigo-200">Documents</h3>
+                        <i class="fas fa-chevron-down text-indigo-300 cursor-pointer" id="documentsToggle"></i>
+                    </div>
+                    <div id="documentsList" class="space-y-2">
+                        <!-- Document items will be populated here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Upload Document -->
+            <div class="p-6 border-t border-indigo-700">
+                <label for="fileUpload" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2 hover:bg-indigo-700 transition-colors cursor-pointer">
+                    <i class="fas fa-upload"></i>
+                    <span>Upload PDF</span>
+                </label>
+                <input type="file" id="fileUpload" accept=".pdf" class="hidden" />
+            </div>
+        </div>
+        
+        <!-- Right Chat Area -->
+        <div class="flex-1 flex flex-col chat-gradient">
+            <!-- Chat Header -->
+            <div class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-file-alt text-indigo-600 text-xl"></i>
+                    <h2 class="text-xl font-semibold text-gray-800">Document Chat</h2>
+                </div>
+                <button id="settingsBtn" class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i class="fas fa-cog text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Chat Messages -->
+            <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                <!-- Welcome Message -->
+                <div class="message-bubble">
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-brain text-white text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <span class="font-semibold text-gray-800">AI Document Assistant</span>
+                                <span class="text-sm text-gray-500">Ready to help with your documents</span>
+                            </div>
+                            <div class="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                                <p class="text-gray-700">
+                                    Hello! I'm your AI document assistant. I can help you analyze, understand, and extract insights from your uploaded documents. What would you like to know?
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Input -->
+            <div class="bg-white border-t border-gray-200 p-6">
+                <div class="flex items-end space-x-3">
+                    <button id="attachBtn" class="text-gray-500 hover:text-indigo-600 transition-colors p-2">
+                        <i class="fas fa-paperclip text-xl"></i>
+                    </button>
+                    <div class="flex-1 relative">
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="Ask me anything about your documents..."
+                            class="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            rows="1"
+                            maxlength="1000"
+                        ></textarea>
+                        <div id="charCount" class="absolute bottom-2 right-2 text-xs text-gray-400">
+                            0/1000
+                        </div>
+                    </div>
+                    <button id="sendBtn" class="gradient-bg text-white p-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-2 text-center">
+                    AI can make mistakes. Please verify important information.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800">Settings</h3>
+                    <button id="closeSettings" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">AI Model</label>
+                        <select id="modelSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="llama3.2:3b">Llama 3.2 3B (Default)</option>
+                            <option value="llama3.1:8b">Llama 3.1 8B</option>
+                            <option value="llama3.1:70b">Llama 3.1 70B</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Response Style</label>
+                        <select id="styleSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="concise">Concise</option>
+                            <option value="detailed">Detailed</option>
+                            <option value="technical">Technical</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 p-6 border-t border-gray-200">
+                    <button id="cancelSettings" class="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button id="saveSettings" class="px-4 py-2 gradient-bg text-white rounded-lg hover:opacity-90">
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Upload Progress Modal -->
+    <div id="uploadModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                <div class="p-6 text-center">
+                    <div class="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-upload text-white text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Uploading Document</h3>
+                    <p id="uploadStatus" class="text-gray-600 mb-4">Processing your PDF...</p>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="uploadProgress" class="gradient-bg h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script>
+        // Global variables
+        let currentChatId = null;
+        let socket = null;
+        let documents = [];
+        let chats = [];
+        
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            setupEventListeners();
+            loadInitialData();
+        });
+        
+        function initializeApp() {
+            // Initialize Socket.IO
+            socket = io();
+            
+            // Setup socket events
+            socket.on('connect', () => {
+                console.log('Connected to server');
+            });
+            
+            socket.on('message', (data) => {
+                handleIncomingMessage(data);
+            });
+        }
+        
+        function setupEventListeners() {
+            // New chat button
+            document.getElementById('newChatBtn').addEventListener('click', startNewChat);
+            
+            // Send button
+            document.getElementById('sendBtn').addEventListener('click', sendMessage);
+            
+            // Message input
+            const messageInput = document.getElementById('messageInput');
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Character count
+            messageInput.addEventListener('input', updateCharCount);
+            
+            // File upload
+            document.getElementById('fileUpload').addEventListener('change', handleFileUpload);
+            
+            // Settings
+            document.getElementById('settingsBtn').addEventListener('click', openSettings);
+            document.getElementById('closeSettings').addEventListener('click', closeSettings);
+            document.getElementById('cancelSettings').addEventListener('click', closeSettings);
+            document.getElementById('saveSettings').addEventListener('click', saveSettings);
+            
+            // Toggle sections
+            document.getElementById('chatsToggle').addEventListener('click', toggleSection);
+            document.getElementById('documentsToggle').addEventListener('click', toggleSection);
+        }
+        
+        function loadInitialData() {
+            // Load documents
+            fetch('/api/documents')
+                .then(response => response.json())
+                .then(data => {
+                    documents = data;
+                    renderDocuments();
+                })
+                .catch(error => console.error('Error loading documents:', error));
+            
+            // Load chats
+            fetch('/api/chats')
+                .then(response => response.json())
+                .then(data => {
+                    chats = data;
+                    renderChats();
+                })
+                .catch(error => console.error('Error loading chats:', error));
+        }
+        
+        function renderDocuments() {
+            const container = document.getElementById('documentsList');
+            container.innerHTML = '';
+            
+            documents.forEach(doc => {
+                const docElement = createDocumentElement(doc);
+                container.appendChild(docElement);
+            });
+        }
+        
+        function renderChats() {
+            const container = document.getElementById('recentChats');
+            container.innerHTML = '';
+            
+            chats.forEach(chat => {
+                const chatElement = createChatElement(chat);
+                container.appendChild(chatElement);
+            });
+        }
+        
+        function createDocumentElement(doc) {
+            const div = document.createElement('div');
+            div.className = 'document-card bg-indigo-800/50 rounded-lg p-3 cursor-pointer hover:bg-indigo-800/70 transition-colors';
+            div.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-file-pdf text-red-400 text-lg"></i>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white font-medium truncate">${doc.name}</p>
+                        <p class="text-indigo-200 text-sm">${doc.pages} pages • ${doc.uploaded}</p>
+                    </div>
+                </div>
+            `;
+            
+            div.addEventListener('click', () => selectDocument(doc));
+            return div;
+        }
+        
+        function createChatElement(chat) {
+            const div = document.createElement('div');
+            div.className = 'chat-item bg-indigo-800/30 rounded-lg p-3 cursor-pointer';
+            div.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-comment text-indigo-300 text-lg"></i>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white font-medium truncate">${chat.title}</p>
+                        <p class="text-indigo-200 text-sm">${chat.document} • ${chat.last_message}</p>
+                    </div>
+                </div>
+            `;
+            
+            div.addEventListener('click', () => selectChat(chat));
+            return div;
+        }
+        
+        function startNewChat() {
+            currentChatId = null;
+            clearChatMessages();
+            addWelcomeMessage();
+        }
+        
+        function selectChat(chat) {
+            currentChatId = chat.id;
+            loadChatHistory(chat.id);
+        }
+        
+        function selectDocument(doc) {
+            // Start new chat with document context
+            currentChatId = `doc_${doc.id}`;
+            clearChatMessages();
+            addDocumentContextMessage(doc);
+        }
+        
+        function loadChatHistory(chatId) {
+            fetch(`/api/chat/${chatId}`)
+                .then(response => response.json())
+                .then(data => {
+                    clearChatMessages();
+                    data.forEach(message => {
+                        addMessageToChat(message);
+                    });
+                })
+                .catch(error => console.error('Error loading chat history:', error));
+        }
+        
+        function clearChatMessages() {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = '';
+        }
+        
+        function addWelcomeMessage() {
+            const container = document.getElementById('chatMessages');
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.className = 'message-bubble';
+            welcomeDiv.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-brain text-white text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="font-semibold text-gray-800">AI Document Assistant</span>
+                            <span class="text-sm text-gray-500">Ready to help with your documents</span>
+                        </div>
+                        <div class="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                            <p class="text-gray-700">
+                                Hello! I'm your AI document assistant. I can help you analyze, understand, and extract insights from your uploaded documents. What would you like to know?
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(welcomeDiv);
+        }
+        
+        function addDocumentContextMessage(doc) {
+            const container = document.getElementById('chatMessages');
+            const contextDiv = document.createElement('div');
+            contextDiv.className = 'message-bubble';
+            contextDiv.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-file-pdf text-white text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="font-semibold text-gray-800">Document Context</span>
+                            <span class="text-sm text-gray-500">Ready to analyze</span>
+                        </div>
+                        <div class="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                            <p class="text-gray-700">
+                                I'm ready to help you with <strong>${doc.name}</strong>. This document has ${doc.pages} pages and was uploaded ${doc.uploaded}. What would you like to know about it?
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(contextDiv);
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            addMessageToChat({
+                type: 'user',
+                content: message,
+                timestamp: new Date().toLocaleTimeString()
+            });
+            
+            // Clear input
+            input.value = '';
+            updateCharCount();
+            
+            // Show typing indicator
+            showTypingIndicator();
+            
+            // Send to API
+            fetch('/api/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    question: message,
+                    chat_id: currentChatId || 'new'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideTypingIndicator();
+                
+                if (data.error) {
+                    addMessageToChat({
+                        type: 'assistant',
+                        content: `Error: ${data.error}`,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+                } else {
+                    addMessageToChat({
+                        type: 'assistant',
+                        content: data.answer,
+                        timestamp: new Date().toLocaleTimeString(),
+                        sources: data.sources
+                    });
+                }
+            })
+            .catch(error => {
+                hideTypingIndicator();
+                console.error('Error:', error);
+                addMessageToChat({
+                    type: 'assistant',
+                    content: 'Sorry, I encountered an error. Please try again.',
+                    timestamp: new Date().toLocaleTimeString()
+                });
+            });
+        }
+        
+        function addMessageToChat(message) {
+            const container = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message-bubble';
+            
+            const isUser = message.type === 'user';
+            const alignment = isUser ? 'justify-end' : 'justify-start';
+            const bgColor = isUser ? 'gradient-bg text-white' : 'bg-white';
+            const textColor = isUser ? 'text-white' : 'text-gray-700';
+            
+            let sourcesHtml = '';
+            if (message.sources && message.sources.length > 0) {
+                sourcesHtml = `
+                    <div class="mt-3 pt-3 border-t border-gray-200">
+                        <p class="text-sm font-medium text-gray-600 mb-2">Sources:</p>
+                        <div class="space-y-2">
+                            ${message.sources.map(source => `
+                                <div class="text-xs text-gray-500">
+                                    <span class="font-medium">${source.filename}</span> 
+                                    (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="flex ${alignment}">
+                    <div class="flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''} max-w-3xl">
+                        ${!isUser ? `
+                            <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-brain text-white text-sm"></i>
+                            </div>
+                        ` : ''}
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2 mb-2 ${isUser ? 'justify-end' : ''}">
+                                <span class="font-semibold ${isUser ? 'text-white' : 'text-gray-800'}">${isUser ? 'You' : 'AI Document Assistant'}</span>
+                                <span class="text-sm ${isUser ? 'text-indigo-100' : 'text-gray-500'}">${message.timestamp}</span>
+                            </div>
+                            <div class="${bgColor} rounded-lg p-4 shadow-sm ${!isUser ? 'border border-gray-200' : ''}">
+                                <div class="${textColor} whitespace-pre-wrap">${message.content}</div>
+                                ${sourcesHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function showTypingIndicator() {
+            const container = document.getElementById('chatMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typingIndicator';
+            typingDiv.className = 'message-bubble';
+            typingDiv.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-brain text-white text-sm"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <span class="font-semibold text-gray-800">AI Document Assistant</span>
+                            <span class="text-sm text-gray-500">Typing...</span>
+                        </div>
+                        <div class="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                            <div class="typing-indicator"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(typingDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function hideTypingIndicator() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+        
+        function updateCharCount() {
+            const input = document.getElementById('messageInput');
+            const charCount = document.getElementById('charCount');
+            const count = input.value.length;
+            charCount.textContent = `${count}/1000`;
+            
+            // Update send button state
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = count === 0;
+        }
+        
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                alert('Please select a PDF file.');
+                return;
+            }
+            
+            // Show upload modal
+            document.getElementById('uploadModal').classList.remove('hidden');
+            
+            // Simulate upload progress
+            let progress = 0;
+            const progressBar = document.getElementById('uploadProgress');
+            const status = document.getElementById('uploadStatus');
+            
+            const interval = setInterval(() => {
+                progress += Math.random() * 20;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    
+                    // Complete upload
+                    setTimeout(() => {
+                        document.getElementById('uploadModal').classList.add('hidden');
+                        document.getElementById('uploadProgress').style.width = '0%';
+                        
+                        // Refresh documents list
+                        loadInitialData();
+                        
+                        alert('Document uploaded successfully!');
+                    }, 500);
+                }
+                
+                progressBar.style.width = progress + '%';
+                status.textContent = `Uploading... ${Math.round(progress)}%`;
+            }, 200);
+        }
+        
+        function openSettings() {
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+        
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+        
+        function saveSettings() {
+            const model = document.getElementById('modelSelect').value;
+            const style = document.getElementById('styleSelect').value;
+            
+            // Save settings (in production, this would be sent to the server)
+            localStorage.setItem('aiModel', model);
+            localStorage.setItem('responseStyle', style);
+            
+            closeSettings();
+            alert('Settings saved successfully!');
+        }
+        
+        function toggleSection(event) {
+            const section = event.target.closest('div').nextElementSibling;
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                event.target.style.transform = 'rotate(0deg)';
+            } else {
+                section.style.display = 'none';
+                event.target.style.transform = 'rotate(-90deg)';
+            }
+        }
+        
+        function handleIncomingMessage(data) {
+            // Handle real-time messages from Socket.IO
+            console.log('Received message:', data);
+        }
+        
+        // Auto-resize textarea
+        const messageInput = document.getElementById('messageInput');
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+    </script>
+</body>
+</html>
