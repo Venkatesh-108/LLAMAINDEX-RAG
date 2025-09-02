@@ -114,7 +114,7 @@ else:
 @dataclass
 class RAGConfig:
     """Configuration for the RAG system - Optimized for accuracy"""
-    pdf_directory: str = "./dell_srm_pdfs"
+    pdf_directory: str = "./documents"
     vector_db_path: str = "./vector_db"
     ollama_host: str = "http://localhost:11434"
     llm_model: str = "llama3.1:8b"
@@ -1194,7 +1194,7 @@ def main():
     parser.add_argument(
         "--pdf-dir", "-p",
         type=str,
-        default="./dell_srm_pdfs",
+        default="./documents",
         help="Directory containing Dell SRM PDF files"
     )
     

@@ -46,7 +46,7 @@ cd dell-srm-rag
 python setup.py
 
 # 3. Add your Dell SRM PDF files
-cp /path/to/your/srm-pdfs/* ./dell_srm_pdfs/
+cp /path/to/your/srm-pdfs/* ./documents/
 
 # 4. Start the system
 ./start_rag.sh  # Linux/macOS
@@ -75,8 +75,8 @@ ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 
 # 3. Create directories and add PDFs
-mkdir dell_srm_pdfs vector_db logs config
-cp /path/to/your/srm-pdfs/* ./dell_srm_pdfs/
+mkdir documents vector_db logs config
+cp /path/to/your/srm-pdfs/* ./documents/
 
 # 4. Run the system
 python app.py
@@ -121,7 +121,7 @@ dell-srm-rag/
 ├── README.md               # This file
 ├── start_rag.sh            # Linux/macOS start script
 ├── start_rag.bat           # Windows start script
-├── dell_srm_pdfs/          # Place your PDF files here
+├── documents/          # Place your PDF files here
 ├── vector_db/              # Vector database storage
 ├── logs/                   # System logs
 └── config/                 # Configuration files
@@ -134,7 +134,7 @@ The system uses `config/config.json` for configuration:
 
 ```json
 {
-  "pdf_directory": "./dell_srm_pdfs",
+  "pdf_directory": "./documents",
   "vector_db_path": "./vector_db",
   "ollama_host": "http://localhost:11434",
   "llm_model": "llama3.1:8b",
@@ -231,10 +231,10 @@ curl http://localhost:11434
 **2. "No PDF files found"**
 ```bash
 # Check PDF directory
-ls -la dell_srm_pdfs/
+ls -la documents/
 
 # Add PDF files
-cp /path/to/srm-pdfs/*.pdf dell_srm_pdfs/
+cp /path/to/srm-pdfs/*.pdf documents/
 ```
 
 **3. "Failed to create vector index"**

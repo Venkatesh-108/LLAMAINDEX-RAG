@@ -850,7 +850,7 @@ RUN pip install --no-cache-dir -r requirements_enhanced.txt
 COPY . .
 
 # Create directories
-RUN mkdir -p /app/dell_srm_pdfs /app/vector_db /app/logs
+RUN mkdir -p /app/documents /app/vector_db /app/logs
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -884,7 +884,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./dell_srm_pdfs:/app/dell_srm_pdfs
+      - ./documents:/app/documents
       - ./vector_db:/app/vector_db
       - ./logs:/app/logs
     environment:

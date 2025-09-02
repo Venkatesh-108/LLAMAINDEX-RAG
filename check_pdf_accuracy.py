@@ -10,7 +10,7 @@ def check_pdf_content():
     """Extract key sections from PDF for accuracy verification"""
     try:
         # Open the PDF
-        doc = pymupdf.open('dell_srm_pdfs/SRM Upgrade Guide.pdf')
+        doc = pymupdf.open('documents/SRM Upgrade Guide.pdf')
 
         print('🔍 Extracting key sections from PDF for accuracy verification:')
         print('=' * 60)
