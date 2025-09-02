@@ -53,6 +53,7 @@
         .message-actions {
             position: absolute;
             bottom: -10px;
+            right: 10px; /* Align to the right with some spacing */
             display: flex;
             gap: 4px;
             opacity: 0;
@@ -695,9 +696,25 @@
                 
                 const retryBtn = event.target.closest('.retry-btn');
                 if (retryBtn) {
-                    const messageContent = retryBtn.closest('.message-content-wrapper').querySelector('.message-text').textContent;
-                    // Re-send the message. We can just call sendMessage with the content.
-                    sendMessage(messageContent);
+                    const messageBubble = retryBtn.closest('.message-bubble');
+                    let userMessageContent = '';
+                    
+                    // The retry button is only on assistant messages, so find the preceding user message
+                    let previousSibling = messageBubble.previousElementSibling;
+                    while(previousSibling) {
+                        if (previousSibling.dataset.messageType === 'user') {
+                            userMessageContent = previousSibling.querySelector('.message-text').textContent;
+                            break;
+                        }
+                        previousSibling = previousSibling.previousElementSibling;
+                    }
+
+                    if (userMessageContent) {
+                        // Re-send the identified user message
+                        sendMessage(userMessageContent);
+                    } else {
+                        showErrorMessage('Could not find the original query to retry.');
+                    }
                 }
             });
         }
@@ -1086,6 +1103,8 @@
             
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message-bubble';
+            // Add a data attribute to identify message type for event delegation
+            messageDiv.dataset.messageType = message.type;
             
             const isUser = message.type === 'user';
             const alignment = isUser ? 'justify-end' : 'justify-start';
@@ -1131,10 +1150,12 @@
                             <div class="${isUser ? 'user-message' : 'assistant-message'} p-4 ${isUser ? 'ml-auto' : ''} max-w-2xl relative">
                                 <div class="message-text whitespace-pre-wrap text-sm leading-relaxed">${message.content}</div>
                                 ${sourcesHtml}
-                                <div class="message-actions ${isUser ? 'left-0' : 'right-0'}">
+                                ${!isUser ? `
+                                <div class="message-actions">
                                     <button class="action-btn copy-btn" title="Copy"><i class="fas fa-copy"></i></button>
-                                    ${isUser ? `<button class="action-btn retry-btn" title="Retry"><i class="fas fa-redo"></i></button>` : ''}
+                                    <button class="action-btn retry-btn" title="Retry"><i class="fas fa-redo"></i></button>
                                 </div>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
