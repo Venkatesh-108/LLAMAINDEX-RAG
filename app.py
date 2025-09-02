@@ -126,7 +126,7 @@ class DellSRMDocumentProcessor:
                 r'^\d+\.\d+\s+[A-Z]',
             ],
             'table_indicators': [
-                'Table \d+',
+                r'Table \d+',
                 'Configuration Matrix',
                 'System Requirements',
                 'Port Assignments',
@@ -402,15 +402,26 @@ class RAGVectorStore:
         """Load existing index"""
         try:
             console.print("📂 Loading existing vector index...")
-            
-            storage_context = StorageContext.from_defaults(
-                persist_dir=str(self.storage_dir / "index")
-            )
-            
+
+            # Connect to existing ChromaDB collection
+            collection_name = "dell_srm_docs"
+            try:
+                chroma_collection = self.chroma_client.get_collection(collection_name)
+                vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+                storage_context = StorageContext.from_defaults(
+                    persist_dir=str(self.storage_dir / "index"),
+                    vector_store=vector_store
+                )
+            except Exception:
+                # Fallback to default if collection doesn't exist
+                storage_context = StorageContext.from_defaults(
+                    persist_dir=str(self.storage_dir / "index")
+                )
+
             self.index = load_index_from_storage(storage_context)
             console.print("✅ Vector index loaded successfully")
             return True
-            
+
         except Exception as e:
             console.print(f"❌ Failed to load existing index: {e}")
             return False
