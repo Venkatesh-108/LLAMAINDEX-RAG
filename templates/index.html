@@ -14,6 +14,9 @@
     <!-- Socket.IO for real-time chat -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     
+    <!-- Markdown renderer -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
     <style>
         /* Custom CSS for enhanced design */
         .gradient-bg {
@@ -49,6 +52,21 @@
             border: 1px solid #e5e7eb;
             position: relative;
         }
+        
+        /* Ensure assistant Markdown doesn't inherit pre-wrap spacing */
+        .assistant-message .message-text { white-space: normal; }
+        
+        /* Improve Markdown list appearance in assistant messages */
+        .assistant-message ol,
+        .assistant-message ul {
+            list-style: decimal;
+            padding-left: 1.25rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+        }
+        .assistant-message ul { list-style: disc; }
+        .assistant-message li { margin: 0.25rem 0; }
+        .assistant-message li p { margin: 0; }
         
         .message-actions-outside {
             display: flex;
@@ -460,6 +478,28 @@
                             Your intelligent companion for document analysis, insights extraction, and knowledge discovery.
                         </p>
                     </div>
+                    <!-- Assistant Intro Message -->
+                    <div class="mt-6 max-w-2xl w-full self-start text-left">
+                        <div class="message-bubble">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                                    <i class="fas fa-brain text-white text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <span class="font-semibold text-gray-700 text-sm">AI Assistant</span>
+                                        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Ready</span>
+                                    </div>
+                                    <div class="assistant-message p-4">
+                                        <p class="text-gray-700 text-sm leading-relaxed">
+                                            I'm here to help with your Dell SRM documentation. Try asking:
+                                            <button class="text-indigo-600 hover:underline example-question ml-1" data-question="How to install Solution Pack in SRM ?">"How to install Solution Pack in SRM ?"</button>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -775,6 +815,17 @@
                     });
                 }
                 
+                // Example question quick insert
+                const exampleBtn = event.target.closest('.example-question');
+                if (exampleBtn) {
+                    const q = exampleBtn.getAttribute('data-question') || exampleBtn.textContent;
+                    const input = document.getElementById('messageInput');
+                    input.value = q;
+                    updateCharCount();
+                    input.focus();
+                    return;
+                }
+                
                 const retryBtn = event.target.closest('.retry-btn');
                 if (retryBtn) {
                     const messageBubble = retryBtn.closest('.message-bubble');
@@ -1087,6 +1138,28 @@
                             Your intelligent companion for document analysis, insights extraction, and knowledge discovery.
                         </p>
                     </div>
+                    <!-- Assistant Intro Message -->
+                    <div class="mt-6 max-w-2xl w-full self-start text-left">
+                        <div class="message-bubble">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                                    <i class="fas fa-brain text-white text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <span class="font-semibold text-gray-700 text-sm">AI Assistant</span>
+                                        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Ready</span>
+                                    </div>
+                                    <div class="assistant-message p-4">
+                                        <p class="text-gray-700 text-sm leading-relaxed">
+                                            I'm here to help with your Dell SRM documentation. Try asking:
+                                            <button class="text-indigo-600 hover:underline example-question ml-1" data-question="How to install Solution Pack in SRM ?">"How to install Solution Pack in SRM ?"</button>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
         }
@@ -1123,6 +1196,28 @@
                         <p class="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
                             Your intelligent companion for document analysis, insights extraction, and knowledge discovery.
                         </p>
+                    </div>
+                    <!-- Assistant Intro Message -->
+                    <div class="mt-6 max-w-2xl w-full self-start text-left">
+                        <div class="message-bubble">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                                    <i class="fas fa-brain text-white text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <span class="font-semibold text-gray-700 text-sm">AI Assistant</span>
+                                        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Ready</span>
+                                    </div>
+                                    <div class="assistant-message p-4">
+                                        <p class="text-gray-700 text-sm leading-relaxed">
+                                            I'm here to help with your Dell SRM documentation. Try asking:
+                                            <button class="text-indigo-600 hover:underline example-question ml-1" data-question="How to install Solution Pack in SRM ?">"How to install Solution Pack in SRM ?"</button>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1344,7 +1439,7 @@
                                 <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">${message.timestamp}</span>
                             </div>
                             <div class="${isUser ? 'user-message' : 'assistant-message'} p-4 ${isUser ? 'ml-auto' : ''} max-w-2xl">
-                                <div class="message-text whitespace-pre-wrap text-sm leading-relaxed">${message.content}</div>
+                                <div class="message-text whitespace-pre-wrap text-sm leading-relaxed"></div>
                                 ${sourcesHtml}
                             </div>
                             ${!isUser ? `
@@ -1359,8 +1454,46 @@
                 </div>
             `;
             
+            // Set content with or without Markdown
+            const messageTextEl = messageDiv.querySelector('.message-text');
+            if (!isUser) {
+                try {
+                    const formatted = formatStepsIfNeeded(message.content || '');
+                    messageTextEl.innerHTML = marked.parse(formatted);
+                } catch(e) {
+                    messageTextEl.textContent = message.content || '';
+                }
+            } else {
+                messageTextEl.textContent = message.content || '';
+            }
+            
             container.appendChild(messageDiv);
             container.scrollTop = container.scrollHeight;
+        }
+        
+        // Heuristic formatter: convert step-like paragraphs into numbered Markdown list
+        function formatStepsIfNeeded(text) {
+            try {
+                const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+                if (lines.length < 3) return text; // not a list
+                
+                // Detect if most lines look like imperative steps (start with verbs or 'Click', 'Select', etc.)
+                const stepPrefixes = /^(click|select|go to|enter|assign|verify|check|confirm|proceed|install|resume|open)\b/i;
+                const stepLikeCount = lines.filter(l => stepPrefixes.test(l) || /^\d+[\).\-\s]/.test(l)).length;
+                
+                if (stepLikeCount >= Math.max(3, Math.ceil(lines.length * 0.6))) {
+                    // Keep first line if it's an intro sentence ending with ':'
+                    let intro = '';
+                    let startIdx = 0;
+                    if (lines[0].endsWith(':')) {
+                        intro = lines[0] + '\n\n';
+                        startIdx = 1;
+                    }
+                    const items = lines.slice(startIdx).map(l => l.replace(/^\d+[\).\-\s]+/, '').trim());
+                    return intro + items.map((l, i) => `${i+1}. ${l}`).join('\n');
+                }
+                return text;
+            } catch { return text; }
         }
         
         function appendTokenToLastMessage(token) {
@@ -1391,6 +1524,7 @@
             const tokenSpan = document.createElement('span');
             tokenSpan.className = 'fade-in-token';
             tokenSpan.textContent = token;
+            // During streaming, add as plain text to avoid breaking Markdown mid-token
             lastMessageBubble.appendChild(tokenSpan);
             
             container.scrollTop = container.scrollHeight;
@@ -1401,6 +1535,15 @@
             const streamingContent = container.querySelector('.streaming-message-content');
             
             if (streamingContent) {
+                // Re-render accumulated text as Markdown for consistency
+                try {
+                    const rawText = streamingContent.textContent;
+                    const formatted = formatStepsIfNeeded(rawText);
+                    streamingContent.innerHTML = marked.parse(formatted);
+                } catch (e) {
+                    // Fallback: keep plain text
+                }
+                
                 // Remove the streaming class
                 streamingContent.classList.remove('streaming-message-content');
 
