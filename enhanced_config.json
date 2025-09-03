@@ -12,6 +12,7 @@
   "timeout": 120,
   "rerank_threshold": 0.3,
   "max_context_length": 4096,
+  "use_query_enhancement": true,
 
   "_enhanced_features": {
     "query_enhancement": "Automatically adds Dell SRM context and synonyms",

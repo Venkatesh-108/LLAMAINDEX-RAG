@@ -267,11 +267,6 @@ def index():
     """Main application page"""
     return render_template('index.html')
 
-@app.route('/documents/<path:filename>')
-def serve_document(filename):
-    """Serve documents from the documents directory"""
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
 @app.route('/api/documents')
 def get_documents():
     """Get list of documents"""
@@ -311,6 +306,18 @@ def get_documents():
     except Exception as e:
         app.logger.error(f"Error getting documents: {e}")
         return jsonify(SAMPLE_DOCUMENTS)
+
+@app.route('/api/documents/<path:filename>')
+def serve_document(filename):
+    """Serve a document from the documents directory."""
+    try:
+        return send_from_directory(
+            app.config['UPLOAD_FOLDER'], 
+            filename, 
+            as_attachment=False  # This ensures the browser opens the PDF instead of downloading it
+        )
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
 
 @app.route('/api/chats')
 def get_chats():
@@ -527,7 +534,16 @@ def handle_stream_query(data):
         return
 
     try:
+        # Get settings from the client
+        response_style = data.get('response_style', 'concise')
+        use_query_enhancement = data.get('use_query_enhancement', True)
+
+        # Temporarily override RAG system config for this query
+        original_enhancement_setting = rag_system.config.use_query_enhancement
+        rag_system.config.use_query_enhancement = use_query_enhancement
+        
         full_response = ""
+        # The backend now respects the enhancement setting for the stream_query call
         for response_part in rag_system.stream_query(question):
             if response_part['type'] == 'token':
                 token = response_part['content']
@@ -574,8 +590,13 @@ def handle_stream_query(data):
             elif response_part['type'] == 'error':
                 emit('stream_error', {'error': response_part['content']}, room=sid)
 
+        # Restore original config setting after the query is complete
+        rag_system.config.use_query_enhancement = original_enhancement_setting
+
     except Exception as e:
         app.logger.error(f"Error during stream_query: {e}")
+        # Restore original config setting in case of an error
+        rag_system.config.use_query_enhancement = original_enhancement_setting
         emit('stream_error', {'error': 'An internal error occurred during streaming.'}, room=sid)
 
 

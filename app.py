@@ -129,6 +129,7 @@ class RAGConfig:
     # New accuracy parameters
     rerank_threshold: float = 0.3  # Similarity threshold for reranking
     max_context_length: int = 4096  # Maximum context window
+    use_query_enhancement: bool = True  # New setting to control enhancement
 
 class OllamaManager:
     """Manages Ollama model operations"""
@@ -954,18 +955,29 @@ class DellSRMRAG:
                 "answer": str(response),
                 "query_time": round(query_time, 2),
                 "sources": [],
-                "data_available": True
+                "data_available": True,
+                "performance": {
+                    "total_time": round(query_time, 2),
+                    # Other metrics would be added here if we were tracking them in non-streaming mode
+                }
             }
 
             # Extract source information for relevant sources only
             for i, node in enumerate(relevant_sources[:5]):  # Top 5 relevant sources
+                text = node.text.strip().replace('\\n', ' ')
+                is_truncated = len(text) > 200
+                excerpt = (text[:200] + '...') if is_truncated else text
+
                 source_info = {
                     "source_id": i + 1,
                     "filename": node.metadata.get('filename', 'Unknown'),
+                    "page_number": node.metadata.get('page_label', None),
                     "content_type": node.metadata.get('content_type', 'text'),
                     "document_type": node.metadata.get('document_type', 'general'),
                     "similarity_score": getattr(node, 'score', 0.0),
-                    "excerpt": node.text[:200] + "..." if len(node.text) > 200 else node.text
+                    "excerpt": excerpt,
+                    "full_text": node.text,
+                    "is_truncated": is_truncated
                 }
                 result["sources"].append(source_info)
 
@@ -1059,13 +1071,20 @@ class DellSRMRAG:
             
             sources_data = []
             for i, node in enumerate(relevant_sources[:5]):
+                text = node.text.strip().replace('\\n', ' ')
+                is_truncated = len(text) > 200
+                excerpt = (text[:200] + '...') if is_truncated else text
+
                 sources_data.append({
                     "source_id": i + 1,
                     "filename": node.metadata.get('filename', 'Unknown'),
+                    "page_number": node.metadata.get('page_label', None),
                     "content_type": node.metadata.get('content_type', 'text'),
                     "document_type": node.metadata.get('document_type', 'general'),
                     "similarity_score": getattr(node, 'score', 0.0),
-                    "excerpt": node.text[:200] + "..." if len(node.text) > 200 else node.text
+                    "excerpt": excerpt,
+                    "full_text": node.text,
+                    "is_truncated": is_truncated
                 })
             
             yield {"type": "end", "sources": sources_data, "performance": performance_metrics}
@@ -1077,6 +1096,10 @@ class DellSRMRAG:
     def _enhance_query(self, question: str) -> str:
         """Enhance query for better retrieval accuracy using the LLM"""
         
+        if not self.config.use_query_enhancement:
+            self.logger.info("Skipping LLM-based query enhancement as per configuration.")
+            return question
+
         try:
             prompt = f"""
             Analyze the following user query about Dell SRM. Generate 3-5 alternative queries
@@ -1094,7 +1117,7 @@ class DellSRMRAG:
             
             # Use a smaller, faster model for this task if available
             enhancement_llm = Ollama(
-                model="llama3:8b", # Or a smaller model like tinyllama
+                model="llama3.2:3b", # Switched to the user-preferred small model
                 base_url=self.config.ollama_host,
                 temperature=0.2,
                 request_timeout=30
