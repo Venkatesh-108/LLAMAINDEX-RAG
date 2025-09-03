@@ -601,6 +601,15 @@ def handle_stream_query(data):
 
 
 if __name__ == '__main__':
+    import argparse
+    
+    # Setup argument parser
+    parser = argparse.ArgumentParser(description='SRM AI Doc Assist Web Application')
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind the server to (default: 0.0.0.0)')
+    parser.add_argument('--port', type=int, default=5000, help='Port to bind the server to (default: 5000)')
+    
+    args = parser.parse_args()
+    
     # Setup logging
     logging.basicConfig(level=logging.INFO)
     
@@ -615,6 +624,6 @@ if __name__ == '__main__':
     
     # Run the application
     print("🚀 Starting SRM AI Doc Assist Web Application...")
-    print("📱 Open your browser and navigate to: http://localhost:5000")
+    print(f"📱 Open your browser and navigate to: http://{args.host if args.host != '0.0.0.0' else 'localhost'}:{args.port}")
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host=args.host, port=args.port, debug=True)
