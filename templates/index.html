@@ -144,13 +144,6 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .source-excerpt.truncated .excerpt-content {
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
         .toggle-excerpt-btn {
             font-weight: 500;
         }
@@ -839,15 +832,20 @@
                 
                 const excerptBtn = event.target.closest('.toggle-excerpt-btn');
                 if (excerptBtn) {
-                    const sourceExcerpt = excerptBtn.closest('.source-excerpt');
-                    if (sourceExcerpt) {
-                        if (sourceExcerpt.classList.contains('truncated')) {
-                            sourceExcerpt.classList.remove('truncated');
-                            excerptBtn.textContent = 'Show Less';
-                        } else {
-                            sourceExcerpt.classList.add('truncated');
-                            excerptBtn.textContent = 'Show More';
-                        }
+                    const sourceExcerpt = excerptBtn.parentElement;
+                    const shortExcerpt = sourceExcerpt.querySelector('.short-excerpt');
+                    const fullExcerpt = sourceExcerpt.querySelector('.full-excerpt');
+                    
+                    if (shortExcerpt.classList.contains('hidden')) {
+                        // Show less
+                        shortExcerpt.classList.remove('hidden');
+                        fullExcerpt.classList.add('hidden');
+                        excerptBtn.textContent = 'Show More';
+                    } else {
+                        // Show more
+                        shortExcerpt.classList.add('hidden');
+                        fullExcerpt.classList.remove('hidden');
+                        excerptBtn.textContent = 'Show Less';
                     }
                 }
             });
@@ -1282,10 +1280,11 @@
                                                 <a href="${linkHref}" ${linkTarget} class="font-medium text-indigo-600 hover:text-indigo-800 text-sm mb-1 hover:underline">
                                                     ${source.filename || 'Unknown Source'}${source.page_number ? ` (Page ${source.page_number})` : ''}
                                                 </a>
-                                                <div class="text-xs text-gray-600 mt-1 source-excerpt truncated">
-                                                    <div class="excerpt-content">${source.full_text || 'No excerpt available'}</div>
+                                                <div class="text-xs text-gray-600 mt-1 source-excerpt">
+                                                    <span class="short-excerpt">${source.excerpt || ''}</span>
+                                                    <span class="full-excerpt hidden">${source.full_text || ''}</span>
                                                     ${source.is_truncated ? `
-                                                        <button class="text-blue-500 hover:underline text-xs mt-1 toggle-excerpt-btn">Show More</button>
+                                                        <button class="text-blue-500 hover:underline text-xs ml-1 toggle-excerpt-btn">Show More</button>
                                                     ` : ''}
                                                 </div>
                                             </div>
@@ -1403,26 +1402,38 @@
                             </div>
                                                          <div class="sources-content hidden">
                                  <div class="space-y-2 mt-2">
-                                     ${sources.map(source => `
-                                         <div class="source-item bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
-                                             <div class="flex items-center justify-between">
-                                                 <div class="flex-1">
-                                                     <div class="font-medium text-gray-800 text-sm mb-1">${source.filename}</div>
-                                                     <div class="text-xs text-gray-600">${source.excerpt || 'No excerpt available'}</div>
-                                                 </div>
-                                                 <div class="ml-3">
-                                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                         source.similarity_score >= 0.8 ? 'bg-green-100 text-green-800' :
-                                                         source.similarity_score >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                                                         source.similarity_score >= 0.4 ? 'bg-orange-100 text-orange-800' :
-                                                         'bg-red-100 text-red-800'
-                                                     }">
-                                                         ${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance
-                                                     </span>
-                                                 </div>
-                                             </div>
-                                         </div>
-                                     `).join('')}
+                                     ${sources.map(source => {
+                                        const linkHref = source.filename ? `/api/documents/${encodeURIComponent(source.filename)}${source.page_number ? '#page=' + source.page_number : ''}` : '#';
+                                        const linkTarget = source.filename ? 'target="_blank" rel="noopener noreferrer"' : '';
+                                        
+                                        return `
+                                        <div class="source-item bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                                            <div class="flex items-center justify-between">
+                                                <div class="flex-1">
+                                                    <a href="${linkHref}" ${linkTarget} class="font-medium text-indigo-600 hover:text-indigo-800 text-sm mb-1 hover:underline">
+                                                        ${source.filename || 'Unknown Source'}${source.page_number ? ` (Page ${source.page_number})` : ''}
+                                                    </a>
+                                                    <div class="text-xs text-gray-600 mt-1 source-excerpt">
+                                                        <span class="short-excerpt">${source.excerpt || ''}</span>
+                                                        <span class="full-excerpt hidden">${source.full_text || ''}</span>
+                                                        ${source.is_truncated ? `
+                                                            <button class="text-blue-500 hover:underline text-xs ml-1 toggle-excerpt-btn">Show More</button>
+                                                        ` : ''}
+                                                    </div>
+                                                </div>
+                                                <div class="ml-3">
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                        source.similarity_score >= 0.8 ? 'bg-green-100 text-green-800' :
+                                                        source.similarity_score >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                                                        source.similarity_score >= 0.4 ? 'bg-orange-100 text-orange-800' :
+                                                        'bg-red-100 text-red-800'
+                                                    }">
+                                                        ${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `}).join('')}
                                  </div>
                              </div>
                         </div>
