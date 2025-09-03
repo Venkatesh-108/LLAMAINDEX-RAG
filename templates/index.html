@@ -714,6 +714,10 @@
                     if (!response.ok) {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
+                    // If the response is empty, we still consider it a success.
+                    if (response.status === 204 || response.headers.get("content-length") === "0") {
+                        return { success: true };
+                    }
                     return response.json();
                 })
                 .then(data => {
@@ -1085,6 +1089,14 @@
                     </div>
                 </div>
             `;
+        }
+        
+        // Clear all chat messages from the UI container
+        function clearChatMessages() {
+            const container = document.getElementById('chatMessages');
+            if (container) {
+                container.innerHTML = '';
+            }
         }
         
         function renderChatMessages(chatId) {
