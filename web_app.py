@@ -457,19 +457,27 @@ def upload_document():
 def clear_all_chats():
     """Clear all chats and chat history"""
     try:
+        app.logger.info("Starting to clear all chats...")
+        
         # Clear all data
         chat_data['chats'] = []
         chat_data['chat_history'] = {}
         chat_data['sessions'] = {}
         
+        app.logger.info("Chat data cleared in memory")
+        
         # Save empty data
         save_chat_data(chat_data)
+        
+        app.logger.info("Chat data saved to files successfully")
         
         response_data = {
             "success": True,
             "message": "All chats cleared successfully"
         }
-        return Response(json.dumps(response_data), status=200, mimetype='application/json')
+        
+        app.logger.info("Sending success response")
+        return jsonify(response_data), 200
 
     except Exception as e:
         app.logger.error(f"Error clearing chats: {e}")
@@ -549,13 +557,19 @@ def handle_stream_query(data):
                         "content": full_response,
                         "timestamp": timestamp,
                         "sources": response_part['sources'],
-                        "modelUsed": rag_system.config.llm_model
+                        "modelUsed": rag_system.config.llm_model,
+                        "performance": response_part.get('performance', {})
                     })
                     
                     update_chat_metadata(chat_id, question)
                     save_chat_data(chat_data)
                 
-                emit('stream_end', {'sources': response_part['sources']}, room=sid)
+                # Emit performance metrics along with sources
+                performance_data = response_part.get('performance', {})
+                emit('stream_end', {
+                    'sources': response_part['sources'],
+                    'performance': performance_data
+                }, room=sid)
 
             elif response_part['type'] == 'error':
                 emit('stream_error', {'error': response_part['content']}, room=sid)

@@ -86,16 +86,62 @@
             background-color: #cbd5e1;
         }
 
-        .sources-toggle {
+        .sources-toggle, .performance-toggle {
             cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease-in-out;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 1px solid #e2e8f0;
         }
         
-        .sources-toggle .toggle-icon {
+        .sources-toggle:hover, .performance-toggle:hover {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            border-color: #cbd5e1;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .sources-toggle .toggle-icon, .performance-toggle .toggle-icon {
             transition: transform 0.2s ease-in-out;
+            color: #64748b;
         }
         
-        .sources-toggle.collapsed .toggle-icon {
+        .sources-toggle.collapsed .toggle-icon, .performance-toggle.collapsed .toggle-icon {
             transform: rotate(-90deg);
+        }
+        
+        .sources-content, .performance-content {
+            background: #fafbfc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-top: 8px;
+            padding: 12px;
+        }
+        
+        .performance-content .grid {
+            background: white;
+            border-radius: 4px;
+            padding: 8px;
+            border: 1px solid #f1f5f9;
+        }
+        
+        .metric-item {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .metric-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .source-item {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .source-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
         /* Ensure user messages are visible */
@@ -578,7 +624,7 @@
             });
             
             socket.on('stream_end', (data) => {
-                finalizeStreamingMessage(data.sources);
+                finalizeStreamingMessage(data.sources, data.performance);
             });
 
             socket.on('stream_error', (data) => {
@@ -656,7 +702,12 @@
                 fetch('/api/chat/clear', {
                     method: 'POST'
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         // Clear local data
@@ -676,7 +727,7 @@
                         localStorage.removeItem('currentChatId');
                         // Note: responseStyle setting is preserved
                         
-                        // Show success message in a more elegant way (optional)
+                        // Show success message
                         showSuccessMessage('All chats cleared successfully!');
                     } else {
                         showErrorMessage('Failed to clear chats: ' + (data.error || 'Unknown error'));
@@ -685,9 +736,11 @@
                 .catch(error => {
                     console.error('Error clearing chats:', error);
                     showErrorMessage('Error clearing chats. Please try again.');
+                })
+                .finally(() => {
+                    // Hide modal after request completes (success or error)
+                    document.getElementById('clearChatsModal').classList.add('hidden');
                 });
-                
-                document.getElementById('clearChatsModal').classList.add('hidden');
             });
             
 
@@ -739,6 +792,33 @@
                     if (sourcesContent) {
                         sourcesContent.classList.toggle('hidden');
                         sourcesToggle.classList.toggle('collapsed');
+                    }
+                }
+                
+                const performanceToggle = event.target.closest('.performance-toggle');
+                if (performanceToggle) {
+                    const performanceContent = performanceToggle.nextElementSibling;
+                    if (performanceContent) {
+                        performanceContent.classList.toggle('hidden');
+                        performanceToggle.classList.toggle('collapsed');
+                    }
+                }
+                
+                const metricsBtn = event.target.closest('.metrics-btn');
+                if (metricsBtn) {
+                    const messageBubble = metricsBtn.closest('.message-bubble');
+                    const performanceData = messageBubble?.dataset.performanceData;
+                    
+                    if (performanceData) {
+                        try {
+                            const performance = JSON.parse(performanceData);
+                            showPerformanceMetrics(performance, messageBubble);
+                        } catch (e) {
+                            console.error('Error parsing performance data:', e);
+                            showErrorMessage('Unable to load performance metrics.');
+                        }
+                    } else {
+                        showErrorMessage('Performance metrics not available for this message.');
                     }
                 }
             });
@@ -1138,7 +1218,6 @@
             
             let sourcesHtml = '';
             if (!isUser && message.sources && message.sources.length > 0) {
-                const messageId = `msg-${Date.now()}`;
                 sourcesHtml = `
                     <div class="mt-2 pt-2 border-t border-gray-200">
                         <div class="sources-toggle collapsed flex items-center justify-between text-xs font-medium text-gray-600">
@@ -1146,11 +1225,25 @@
                             <i class="fas fa-chevron-down toggle-icon"></i>
                         </div>
                         <div class="sources-content hidden">
-                            <div class="space-y-1 mt-2">
+                            <div class="space-y-2 mt-2">
                                 ${message.sources.map(source => `
-                                    <div class="text-xs text-gray-500">
-                                        <span class="font-medium">${source.filename}</span> 
-                                        (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
+                                    <div class="source-item bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex-1">
+                                                <div class="font-medium text-gray-800 text-sm mb-1">${source.filename}</div>
+                                                <div class="text-xs text-gray-600">${source.excerpt || 'No excerpt available'}</div>
+                                            </div>
+                                            <div class="ml-3">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                    source.similarity_score >= 0.8 ? 'bg-green-100 text-green-800' :
+                                                    source.similarity_score >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                                                    source.similarity_score >= 0.4 ? 'bg-orange-100 text-orange-800' :
+                                                    'bg-red-100 text-red-800'
+                                                }">
+                                                    ${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 `).join('')}
                             </div>
@@ -1160,6 +1253,11 @@
             }
 
             const messageId = `msg-${Date.now()}`;
+            
+            // Store performance data if available
+            if (message.performance && Object.keys(message.performance).length > 0) {
+                messageDiv.dataset.performanceData = JSON.stringify(message.performance);
+            }
             
             messageDiv.innerHTML = `
                 <div class="flex ${alignment} mb-6">
@@ -1186,6 +1284,7 @@
                             <div class="message-actions-outside">
                                 <button class="action-btn copy-btn" title="Copy"><i class="fas fa-copy"></i></button>
                                 <button class="action-btn retry-btn" title="Retry"><i class="fas fa-redo"></i></button>
+                                <button class="action-btn metrics-btn" title="Performance Metrics"><i class="fas fa-chart-line"></i></button>
                             </div>
                             ` : ''}
                         </div>
@@ -1230,7 +1329,7 @@
             container.scrollTop = container.scrollHeight;
         }
 
-        function finalizeStreamingMessage(sources) {
+        function finalizeStreamingMessage(sources, performance) {
             const container = document.getElementById('chatMessages');
             const streamingContent = container.querySelector('.streaming-message-content');
             
@@ -1246,19 +1345,45 @@
                                 <span>Sources (${sources.length})</span>
                                 <i class="fas fa-chevron-down toggle-icon"></i>
                             </div>
-                            <div class="sources-content hidden">
-                                <div class="space-y-1 mt-2">
-                                    ${sources.map(source => `
-                                        <div class="text-xs text-gray-500">
-                                            <span class="font-medium">${source.filename}</span> 
-                                            (${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance)
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
+                                                         <div class="sources-content hidden">
+                                 <div class="space-y-2 mt-2">
+                                     ${sources.map(source => `
+                                         <div class="source-item bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                                             <div class="flex items-center justify-between">
+                                                 <div class="flex-1">
+                                                     <div class="font-medium text-gray-800 text-sm mb-1">${source.filename}</div>
+                                                     <div class="text-xs text-gray-600">${source.excerpt || 'No excerpt available'}</div>
+                                                 </div>
+                                                 <div class="ml-3">
+                                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                         source.similarity_score >= 0.8 ? 'bg-green-100 text-green-800' :
+                                                         source.similarity_score >= 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                                                         source.similarity_score >= 0.4 ? 'bg-orange-100 text-orange-800' :
+                                                         'bg-red-100 text-red-800'
+                                                     }">
+                                                         ${source.similarity_score ? (source.similarity_score * 100).toFixed(1) + '%' : 'N/A'} relevance
+                                                     </span>
+                                                 </div>
+                                             </div>
+                                         </div>
+                                     `).join('')}
+                                 </div>
+                             </div>
                         </div>
                     `;
                     streamingContent.parentElement.insertAdjacentHTML('beforeend', sourcesHtml);
+                }
+                
+                                // Store performance data for later use if available
+                if (performance) {
+                    // Log performance metrics to console
+                    console.log('🚀 Performance Metrics:', performance);
+                    
+                    // Store performance data in the message element for later access
+                    const messageContainer = streamingContent.closest('.message-bubble');
+                    if (messageContainer) {
+                        messageContainer.dataset.performanceData = JSON.stringify(performance);
+                    }
                 }
             }
             
@@ -1270,6 +1395,71 @@
         function handleStreamingError(error) {
             hideTypingIndicator();
             showErrorMessage(error || 'An error occurred during streaming.');
+        }
+        
+        function showPerformanceMetrics(performance, messageBubble) {
+            // Check if performance metrics are already displayed
+            const existingMetrics = messageBubble.querySelector('.performance-metrics-display');
+            if (existingMetrics) {
+                // Toggle visibility
+                existingMetrics.classList.toggle('hidden');
+                return;
+            }
+            
+            // Create performance metrics display
+            const performanceHtml = `
+                <div class="performance-metrics-display mt-3 pt-2 border-t border-gray-200">
+                    <div class="text-xs font-medium text-gray-600 mb-3">
+                        <span>Performance Metrics</span>
+                    </div>
+                    <div class="performance-content">
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div class="metric-item bg-blue-50 border-l-4 border-blue-400 p-2 rounded">
+                                <span class="font-semibold text-blue-700">Total Time:</span>
+                                <span class="text-blue-600 ml-1">${performance.total_time}s</span>
+                            </div>
+                            <div class="metric-item bg-green-50 border-l-4 border-green-400 p-2 rounded">
+                                <span class="font-semibold text-green-700">LLM Time:</span>
+                                <span class="text-green-600 ml-1">${performance.llm_time}s</span>
+                            </div>
+                            <div class="metric-item bg-purple-50 border-l-4 border-purple-400 p-2 rounded">
+                                <span class="font-semibold text-purple-700">Tokens:</span>
+                                <span class="text-purple-600 ml-1">${performance.token_count}</span>
+                            </div>
+                            <div class="metric-item bg-orange-50 border-l-4 border-orange-400 p-2 rounded">
+                                <span class="font-semibold text-orange-700">Speed:</span>
+                                <span class="text-orange-600 ml-1">${performance.tokens_per_second} t/s</span>
+                            </div>
+                            <div class="metric-item bg-indigo-50 border-l-4 border-indigo-400 p-2 rounded">
+                                <span class="font-semibold text-indigo-700">Enhancement:</span>
+                                <span class="text-indigo-600 ml-1">${performance.enhancement_time}s</span>
+                            </div>
+                            <div class="metric-item bg-teal-50 border-l-4 border-teal-400 p-2 rounded">
+                                <span class="font-semibold text-teal-700">Sources:</span>
+                                <span class="text-teal-600 ml-1">${performance.relevant_sources}/${performance.sources_found}</span>
+                            </div>
+                            <div class="metric-item bg-emerald-50 border-l-4 border-emerald-400 p-2 rounded">
+                                <span class="font-semibold text-emerald-700">Efficiency:</span>
+                                <span class="text-emerald-600 ml-1">${performance.efficiency_score}%</span>
+                            </div>
+                            <div class="metric-item bg-cyan-50 border-l-4 border-cyan-400 p-2 rounded">
+                                <span class="font-semibold text-cyan-700">Quality:</span>
+                                <span class="text-cyan-600 ml-1">${performance.source_quality}%</span>
+                            </div>
+                            <div class="metric-item bg-gray-50 border-l-4 border-gray-400 p-2 rounded col-span-2">
+                                <span class="font-semibold text-gray-700">Model:</span>
+                                <span class="text-gray-600 ml-1">${performance.model_used}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Find the message content wrapper and add metrics after it
+            const messageWrapper = messageBubble.querySelector('.message-content-wrapper');
+            if (messageWrapper) {
+                messageWrapper.insertAdjacentHTML('beforeend', performanceHtml);
+            }
         }
 
         function showTypingIndicator() {

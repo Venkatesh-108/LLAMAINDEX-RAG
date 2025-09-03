@@ -982,17 +982,33 @@ class DellSRMRAG:
             return
 
         try:
+            import time
+            start_time = time.time()
+            
+            # Track query enhancement time
+            enhancement_start = time.time()
             enhanced_query = self._enhance_query(question)
+            enhancement_time = time.time() - enhancement_start
+            
+            # Track prompt creation time
+            prompt_start = time.time()
             enhanced_prompt = self._create_enhanced_prompt(enhanced_query)
-
-            # With streaming=True in the engine, .query() returns a StreamingResponse
+            prompt_time = time.time() - prompt_start
+            
+            # Track LLM response time
+            llm_start = time.time()
             streaming_response = self.query_engine.query(enhanced_prompt)
             
-            # Stream tokens
+            # Stream tokens and count them
+            token_count = 0
             for token in streaming_response.response_gen:
+                token_count += 1
                 yield {"type": "token", "content": token}
             
-            # Once streaming is done, process and yield sources
+            llm_time = time.time() - llm_start
+            
+            # Track source processing time
+            source_start = time.time()
             source_nodes = streaming_response.source_nodes
             relevant_sources = []
             if source_nodes:
@@ -1001,7 +1017,46 @@ class DellSRMRAG:
                 for node in ranked_sources:
                     if getattr(node, 'score', 0.0) >= min_similarity:
                         relevant_sources.append(node)
-
+            source_time = time.time() - source_start
+            
+            # Calculate total time
+            total_time = time.time() - start_time
+            
+            # Prepare performance metrics
+            performance_metrics = {
+                "total_time": round(total_time, 3),
+                "enhancement_time": round(enhancement_time, 3),
+                "prompt_time": round(prompt_time, 3),
+                "llm_time": round(llm_time, 3),
+                "source_time": round(source_time, 3),
+                "token_count": token_count,
+                "tokens_per_second": round(token_count / llm_time if llm_time > 0 else 0, 2),
+                "sources_found": len(source_nodes) if source_nodes else 0,
+                "relevant_sources": len(relevant_sources),
+                "model_used": self.config.llm_model,
+                "efficiency_score": round((llm_time / total_time) * 100, 1) if total_time > 0 else 0,
+                "enhancement_overhead": round((enhancement_time / total_time) * 100, 1) if total_time > 0 else 0,
+                "source_quality": round((len(relevant_sources) / len(source_nodes) * 100) if source_nodes else 0, 1)
+            }
+            
+            # Log detailed performance metrics
+            self.logger.info("=" * 60)
+            self.logger.info("🚀 PERFORMANCE METRICS SUMMARY")
+            self.logger.info("=" * 60)
+            self.logger.info(f"📊 Total Response Time: {performance_metrics['total_time']}s")
+            self.logger.info(f"🔍 Query Enhancement: {performance_metrics['enhancement_time']}s")
+            self.logger.info(f"📝 Prompt Creation: {performance_metrics['prompt_time']}s")
+            self.logger.info(f"🤖 LLM Generation: {performance_metrics['llm_time']}s")
+            self.logger.info(f"📚 Source Processing: {performance_metrics['source_time']}s")
+            self.logger.info(f"🔢 Tokens Generated: {performance_metrics['token_count']}")
+            self.logger.info(f"⚡ Generation Speed: {performance_metrics['tokens_per_second']} tokens/sec")
+            self.logger.info(f"📖 Sources Found: {performance_metrics['sources_found']} total, {performance_metrics['relevant_sources']} relevant")
+            self.logger.info(f"⚡ Efficiency Score: {performance_metrics['efficiency_score']}% (LLM time vs total time)")
+            self.logger.info(f"🎯 Source Quality: {performance_metrics['source_quality']}% (relevant vs total sources)")
+            self.logger.info(f"🔍 Enhancement Overhead: {performance_metrics['enhancement_overhead']}% of total time")
+            self.logger.info(f"🤖 Model Used: {performance_metrics['model_used']}")
+            self.logger.info("=" * 60)
+            
             sources_data = []
             for i, node in enumerate(relevant_sources[:5]):
                 sources_data.append({
@@ -1013,7 +1068,7 @@ class DellSRMRAG:
                     "excerpt": node.text[:200] + "..." if len(node.text) > 200 else node.text
                 })
             
-            yield {"type": "end", "sources": sources_data}
+            yield {"type": "end", "sources": sources_data, "performance": performance_metrics}
             
         except Exception as e:
             self.logger.error(f"Streaming query failed: {e}")
