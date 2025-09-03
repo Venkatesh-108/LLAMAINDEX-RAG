@@ -79,8 +79,8 @@ mkdir documents vector_db logs config
 cp /path/to/your/srm-pdfs/* ./documents/
 
 # 4. Run the system
-python app.py
-venv\Scripts\activate && python app.py
+python web_app.py
+venv\Scripts\activate && python web_app.py
 ```
 
 ## 💡 Usage Examples

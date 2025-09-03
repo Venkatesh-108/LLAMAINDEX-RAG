@@ -50,17 +50,21 @@
             position: relative;
         }
         
-        .message-actions {
-            position: absolute;
-            bottom: -10px;
-            right: 10px; /* Align to the right with some spacing */
+        .message-actions-outside {
             display: flex;
-            gap: 4px;
-            opacity: 0;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 8px;
+            margin-right: 0;
+            width: 100%;
+        }
+        
+        .message-actions-outside .action-btn {
+            opacity: 0.7;
             transition: opacity 0.2s ease-in-out;
         }
         
-        .message-bubble:hover .message-actions {
+        .message-actions-outside .action-btn:hover {
             opacity: 1;
         }
         
@@ -1174,16 +1178,16 @@
                                 <span class="font-semibold ${isUser ? 'text-gray-700' : 'text-gray-700'} text-sm">${isUser ? 'You' : 'AI Assistant'}</span>
                                 <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">${message.timestamp}</span>
                             </div>
-                            <div class="${isUser ? 'user-message' : 'assistant-message'} p-4 ${isUser ? 'ml-auto' : ''} max-w-2xl relative">
+                            <div class="${isUser ? 'user-message' : 'assistant-message'} p-4 ${isUser ? 'ml-auto' : ''} max-w-2xl">
                                 <div class="message-text whitespace-pre-wrap text-sm leading-relaxed">${message.content}</div>
                                 ${sourcesHtml}
-                                ${!isUser ? `
-                                <div class="message-actions">
-                                    <button class="action-btn copy-btn" title="Copy"><i class="fas fa-copy"></i></button>
-                                    <button class="action-btn retry-btn" title="Retry"><i class="fas fa-redo"></i></button>
-                                </div>
-                                ` : ''}
                             </div>
+                            ${!isUser ? `
+                            <div class="message-actions-outside">
+                                <button class="action-btn copy-btn" title="Copy"><i class="fas fa-copy"></i></button>
+                                <button class="action-btn retry-btn" title="Retry"><i class="fas fa-redo"></i></button>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -1286,7 +1290,7 @@
                     <div>
                         <div class="flex items-center space-x-2 mb-2">
                             <span class="font-semibold text-gray-700 text-sm">AI Assistant</span>
-                            <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Typing...</span>
+                            <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Thinking...</span>
                         </div>
                         <div class="assistant-message p-3 inline-block">
                             <div class="typing-indicator"></div>
