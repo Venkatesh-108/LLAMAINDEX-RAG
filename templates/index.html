@@ -964,18 +964,32 @@
         }
         
         function selectChat(chatId) {
-            if (currentChatId === chatId) return;
+            if (currentChatId === chatId) {
+                return; // Don't reload if it's already the current chat
+            }
             
             currentChatId = chatId;
             isNewChat = false;
+            localStorage.setItem('currentChatId', chatId);
             
             const chat = chats.find(c => c.id === chatId);
-            updateCurrentChatTitle(chat.title);
+            updateCurrentChatTitle(chat ? chat.title : '');
             
-            renderChats(); // Re-render to update active state
+            // Highlight the selected chat in the sidebar
+            renderChats();
             
-            if (chatHistory[chatId]) {
-                renderChatMessages(chatId);
+            // Check if chat history is available, if not, fetch it
+            if (!chatHistory[chatId]) {
+                fetch(`/api/chat/${chatId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        chatHistory[chatId] = data.history || [];
+                        loadChatHistory(chatId);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching chat history:', error);
+                        showErrorMessage('Could not load chat history.');
+                    });
             } else {
                 loadChatHistory(chatId);
             }
