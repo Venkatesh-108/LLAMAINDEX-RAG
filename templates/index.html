@@ -957,7 +957,7 @@
             const div = document.createElement('div');
             div.className = 'document-card bg-indigo-800/50 rounded-lg p-2 cursor-pointer hover:bg-indigo-800/70 transition-all duration-200 enhanced-item';
             div.innerHTML = `
-                <a href="/documents/${doc.name}" target="_blank" class="flex items-center space-x-2">
+                <a href="/api/documents/${encodeURIComponent(doc.name)}" target="_blank" class="flex items-center space-x-2">
                     <div class="w-6 h-6 bg-red-500/20 rounded-lg flex items-center justify-center">
                         <i class="fas fa-file-pdf text-red-400 text-xs"></i>
                     </div>
